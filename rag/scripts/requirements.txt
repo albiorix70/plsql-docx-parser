@@ -1,0 +1,7 @@
+sentence-transformers
+faiss-cpu
+python-docx
+pdfminer.six
+numpy
+tqdm
+openai

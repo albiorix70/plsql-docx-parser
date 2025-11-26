@@ -1,0 +1,14 @@
+# RAG storage - ignore large binary/index files
+*.npy
+*.bin
+*.pth
+*.faiss
+/index/
+/embeddings/
+/cache/
+*.sqlite
+*.db
+
+# OS files
+Thumbs.db
+.DS_Store
