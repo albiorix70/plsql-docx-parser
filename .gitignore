@@ -1,0 +1,12 @@
+## Repository-level .gitignore
+# Ignore pdfmake build/artifacts
+pdfmake/
+
+# Ignore common document formats (rtf, docx, xml)
+*.rtf
+*.docx
+*.xml
+
+# Optionally ignore other generated files
+# node_modules/
+# .venv/
