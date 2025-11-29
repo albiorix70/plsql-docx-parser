@@ -8,6 +8,7 @@ create or replace package docx_parser as
          is_bold      boolean,
          is_italic    boolean,
          is_underline boolean,
+         justify      varchar2(20), 
          font_color   varchar2(50),
          font_name    varchar2(100)
    );

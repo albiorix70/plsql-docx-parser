@@ -203,4 +203,3 @@ begin
 end;
 /
 
-select * From APEX_APPLICATION_FILES;

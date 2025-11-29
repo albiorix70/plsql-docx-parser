@@ -3,10 +3,63 @@ create or replace package body docx_parser as
    function extract_node (
       p_node in xmltype
    ) return t_content_element is
-      l_element t_content_element;
+      l_element t_content_element default t_content_element(
+         element_type => 'PARAGRAPH',
+         text_content => null,
+         style_name   => null,
+         font_size    => null,
+         is_bold      => null,
+         is_italic    => null,
+         is_underline => null,
+         font_color   => null,
+         font_name    => null
+      );
    begin
-      null;
+      for i in (
+         select *
+           from xmltable ( xmlnamespaces ( 'http://schemas.openxmlformats.org/wordprocessingml/2006/main' as "w" ),
+         '/w:p'
+               passing p_node
+            columns
+               style varchar2(100) path 'w:pPr/w:pStyle/@w:val',
+               fontsize varchar2(10) path 'w:rPr/w:sz/@w:val',
+               justify varchar2(20) path 'w:pPr/w:jc/@w:val',
+               ascii_fontname varchar2(100) path 'w:rPr/w:rFonts/@w:ascii',
+               ansi_fontname varchar2(100) path 'w:rPr/w:rFonts/@w:hAnsi',
+               utf_fontname varchar2(100) path 'w:rPr/w:rFonts/@w:cs',
+               text_color varchar2(20) path 'w:rPr/w:color/@w:val',
+               underline varchar2(20) path 'w:rPr/w:u/@w:val',
+               bold varchar2(5) path 'w:rPr/w:b',
+               italic varchar2(5) path 'w:rPr/w:i',
+               text clob path './w:r/string()'
+         )
+      ) loop
+         l_element.text_content := i.text;
+         l_element.style_name := i.style;
+         if i.fontsize is not null then
+            l_element.font_size := to_number ( i.fontsize default null on conversion error ) / 2;
+         end if;
+         l_element.font_name := coalesce(
+            i.utf_fontname,
+            i.ansi_fontname,
+            i.ascii_fontname
+         );
+         l_element.justify := i.justify;
+         l_element.font_color := i.text_color;
+         if i.bold is not null then
+            l_element.is_bold := true;
+         end if;
+         if i.italic is not null then
+            l_element.is_italic := true;
+         end if;
+         if
+            i.underline is not null
+            and lower(i.underline) <> 'none'
+         then
+            l_element.is_underline := true;
+         end if;
 
+      end loop;
       return l_element;
    end extract_node;
 
@@ -23,59 +76,32 @@ create or replace package body docx_parser as
       end if;
       l_xml := xmltype(p_content_xml);
 
-      -- 1) Extract paragraphs (w:p) as paragraph elements with their full text
+        -- Iterate over child nodes of body
       for p_rec in (
-         select x.p_node
+         select x.p_node,
+                x.x
            from xmltable ( xmlnamespaces ( 'http://schemas.openxmlformats.org/wordprocessingml/2006/main' as "w" ),
-         '/w:document/w:body/w:p'
+         '/w:document/w:body/*'
                passing l_xml
             columns
+               x varchar2(100) path 'local-name(.)',
                p_node xmltype path '.'
          ) x
       ) loop
-         l_element.element_type := 'PARAGRAPH';
-         l_element.text_content := p_rec.p_text;
-         l_element.style_name := null;
-         l_element.font_size := null;
-         l_element.is_bold := null;
-         l_element.is_italic := null;
-         l_element.is_underline := null;
+         case p_rec.x
+            when 'p' then
+               l_element := extract_node(p_rec.p_node);
+               l_element.element_type := 'PARAGRAPH';
+            when 'tbl' then
+               l_element.element_type := 'TABLE';
+            else
+            -- skip other elements for now
+               continue;
+         end case;
          l_elements.extend;
          l_elements(l_elements.count) := l_element;
       end loop;
 
-      -- 2) Extract runs by iterating paragraphs first, then their runs (avoids ancestor:: axis)
-      for p_rec in (
-         select x.pnode
-           from xmltable ( xmlnamespaces ( 'http://schemas.openxmlformats.org/wordprocessingml/2006/main' as "w" ),
-         '/w:document/w:body/w:p'
-               passing l_xml
-            columns
-               pnode xmltype path '.'
-         ) x
-      ) loop
-         for r_rec in (
-            select x.t_text
-              from xmltable ( xmlnamespaces ( 'http://schemas.openxmlformats.org/wordprocessingml/2006/main' as "w" ),
-            'w:r'
-                  passing p_rec.pnode
-               columns
-                  t_text clob path 'w:t'
-            ) x
-         ) loop
-            l_element.element_type := 'TEXT';
-            l_element.text_content := r_rec.t_text;
-            l_element.style_name := null;
-            l_element.font_size := null;
-            l_element.is_bold := null;
-            l_element.is_italic := null;
-            l_element.is_underline := null;
-            l_element.font_color := null;
-            l_element.font_name := null;
-            l_elements.extend;
-            l_elements(l_elements.count) := l_element;
-         end loop;
-      end loop;
 
       return l_elements;
    end parse_content_xml;
@@ -437,8 +463,9 @@ create or replace package body docx_parser as
       p_document_xml out clob,
       p_styles_xml   out clob
    ) is
+
       l_blob      blob;
-      l_out_clob  clob;
+      l_out_blob  blob;
       l_sql       varchar2(1000);
       l_found     number := 0;
       l_dir       apex_zip.t_dir_entries;
@@ -461,6 +488,13 @@ create or replace package body docx_parser as
          l_found := 1;
       exception
          when no_data_found then
+            logger.log_error(
+               'unpack_docx_from_apex',
+               'No row found in apex_application_files for '
+               || p_id_col
+               || '='
+               || p_id_val
+            );
             raise_application_error(
                -20001,
                'No row found in apex_application_files for '
@@ -469,21 +503,11 @@ create or replace package body docx_parser as
                || p_id_val
             );
          when others then
-            begin
-               begin
-                  logger.log_error(
-                     'unpack_docx_from_apex',
-                     sqlerrm
-                  );
-               exception
-                  when others then
-                     null;
-               end;
-               raise_application_error(
-                  -20002,
-                  'Error selecting blob from apex_application_files: ' || sqlerrm
-               );
-            end;
+            logger.log_error(
+               'unpack_docx_from_apex',
+               sqlerrm
+            );
+            raise;
       end;
  
  
@@ -491,56 +515,41 @@ create or replace package body docx_parser as
       l_dir := apex_zip.get_dir_entries(p_zipped_blob => l_blob);
       if l_dir.exists('word/document.xml') then
          logger.log('DOCX parser: extracting word/document.xml');
-         l_out_clob := apex_zip.get_file_content(
+         l_out_blob := apex_zip.get_file_content(
             p_zipped_blob => l_blob,
             p_dir_entry   => l_dir('word/document.xml')
          );
 
-         if l_out_clob is not null then
+         if l_out_blob is not null then
             begin
-               p_document_xml := to_clob(l_out_clob);
-               l_out_clob := null;
+               p_document_xml := to_clob(l_out_blob);
             exception
                when others then
-                  begin
-                     begin
-                        logger.log_error(
-                           'unpack_docx_from_apex',
-                           sqlerrm
-                        );
-                     exception
-                        when others then
-                           null;
-                     end;
-                     p_document_xml := null;
-                  end;
+                  logger.log_error(
+                     'unpack_docx_from_apex',
+                     sqlerrm
+                  );
+                  p_document_xml := null;
             end;
          end if;
       end if;
+      -- Try to extract styles.xml if present
       if l_dir.exists('word/styles.xml') then
-         l_out_clob := apex_zip.get_file_content(
+         l_out_blob := apex_zip.get_file_content(
             p_zipped_blob => l_blob,
             p_dir_entry   => l_dir('word/styles.xml')
          );
 
-         if l_out_clob is not null then
+         if l_out_blob is not null then
             begin
-               p_styles_xml := to_clob(l_out_clob);
-               l_out_clob := null;
+               p_styles_xml := to_clob(l_out_blob);
             exception
                when others then
-                  begin
-                     begin
-                        logger.log_error(
-                           'unpack_docx_from_apex',
-                           sqlerrm
-                        );
-                     exception
-                        when others then
-                           null;
-                     end;
-                     p_styles_xml := null;
-                  end;
+                  logger.log_error(
+                     'unpack_docx_from_apex',
+                     sqlerrm
+                  );
+                  p_styles_xml := null;
             end;
          end if;
       end if;
