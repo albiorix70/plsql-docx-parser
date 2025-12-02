@@ -1,6 +1,16 @@
 create or replace package body docx_parser as
 
-   function extract_node (
+   function extract_paragraph_node (
+      p_node in xmltype
+   ) return t_content_element;
+
+   function extract_table_node (
+      p_node in xmltype
+   ) return t_content_element;
+
+
+
+   function extract_paragraph_node (
       p_node in xmltype
    ) return t_content_element is
       l_element t_content_element default t_content_element(
@@ -61,7 +71,26 @@ create or replace package body docx_parser as
 
       end loop;
       return l_element;
-   end extract_node;
+   end extract_paragraph_node;
+
+   function extract_table_node (
+      p_node in xmltype
+   ) return t_content_element is
+      l_element t_content_element default t_content_element(
+         element_type => 'TABLE',
+         text_content => null,
+         style_name   => null,
+         font_size    => null,
+         is_bold      => null,
+         is_italic    => null,
+         is_underline => null,
+         font_color   => null,
+         font_name    => null
+      );
+   begin
+      -- Placeholder implementation
+      return l_element;
+   end extract_table_node;
 
    function parse_content_xml (
       p_content_xml in clob
@@ -90,9 +119,10 @@ create or replace package body docx_parser as
       ) loop
          case p_rec.x
             when 'p' then
-               l_element := extract_node(p_rec.p_node);
+               l_element := extract_paragraph_node(p_rec.p_node);
                l_element.element_type := 'PARAGRAPH';
             when 'tbl' then
+               l_element := extract_table_node(p_rec.p_node);
                l_element.element_type := 'TABLE';
             else
             -- skip other elements for now

@@ -8,7 +8,7 @@ create or replace package docx_parser as
          is_bold      boolean,
          is_italic    boolean,
          is_underline boolean,
-         justify      varchar2(20), 
+         justify      varchar2(20),
          font_color   varchar2(50),
          font_name    varchar2(100)
    );
@@ -61,22 +61,6 @@ create or replace package docx_parser as
       p_document_xml out clob,
       p_styles_xml   out clob
    );
-   
-   -- Helper functions to extract specific elements
-   function extract_text_elements (
-      p_content_xml in clob
-   ) return t_content_elements;
-   function extract_paragraphs (
-      p_content_xml in clob
-   ) return t_content_elements;
-   function extract_tables (
-      p_content_xml in clob
-   ) return t_content_elements;
-   
-   -- Function to get formatted text as CLOB
-   function get_formatted_text (
-      p_content_xml in clob
-   ) return clob;
 
 end docx_parser;
 /
