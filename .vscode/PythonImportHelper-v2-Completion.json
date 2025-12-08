@@ -1,0 +1,170 @@
+[
+    {
+        "label": "os",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "os",
+        "description": "os",
+        "detail": "os",
+        "documentation": {}
+    },
+    {
+        "label": "sys",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "sys",
+        "description": "sys",
+        "detail": "sys",
+        "documentation": {}
+    },
+    {
+        "label": "argparse",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "argparse",
+        "description": "argparse",
+        "detail": "argparse",
+        "documentation": {}
+    },
+    {
+        "label": "json",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "json",
+        "description": "json",
+        "detail": "json",
+        "documentation": {}
+    },
+    {
+        "label": "Path",
+        "importPath": "pathlib",
+        "description": "pathlib",
+        "isExtraImport": true,
+        "detail": "pathlib",
+        "documentation": {}
+    },
+    {
+        "label": "sha1",
+        "importPath": "hashlib",
+        "description": "hashlib",
+        "isExtraImport": true,
+        "detail": "hashlib",
+        "documentation": {}
+    },
+    {
+        "label": "numpy",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "numpy",
+        "description": "numpy",
+        "detail": "numpy",
+        "documentation": {}
+    },
+    {
+        "label": "tqdm",
+        "importPath": "tqdm",
+        "description": "tqdm",
+        "isExtraImport": true,
+        "detail": "tqdm",
+        "documentation": {}
+    },
+    {
+        "label": "Embedder",
+        "kind": 6,
+        "importPath": "rag.scripts.ingest",
+        "description": "rag.scripts.ingest",
+        "peekOfCode": "class Embedder:\n    def __init__(self, provider='st'):\n        self.provider = provider\n        if provider == 'st':\n            if not _HAS_ST:\n                raise RuntimeError('sentence-transformers not available')\n            self.model = SentenceTransformer('all-MiniLM-L6-v2')\n        elif provider == 'openai':\n            if not _HAS_OPENAI:\n                raise RuntimeError('openai package not available')",
+        "detail": "rag.scripts.ingest",
+        "documentation": {}
+    },
+    {
+        "label": "extract_text",
+        "kind": 2,
+        "importPath": "rag.scripts.ingest",
+        "description": "rag.scripts.ingest",
+        "peekOfCode": "def extract_text(path: Path) -> str:\n    suffix = path.suffix.lower()\n    if suffix == '.txt':\n        return path.read_text(encoding='utf-8', errors='ignore')\n    if suffix == '.docx':\n        try:\n            from docx import Document\n        except Exception:\n            raise RuntimeError('python-docx not installed (pip install python-docx)')\n        doc = Document(path)",
+        "detail": "rag.scripts.ingest",
+        "documentation": {}
+    },
+    {
+        "label": "doc_id_for_path",
+        "kind": 2,
+        "importPath": "rag.scripts.ingest",
+        "description": "rag.scripts.ingest",
+        "peekOfCode": "def doc_id_for_path(path: Path) -> str:\n    # stable id based on file path\n    h = sha1(str(path).encode('utf-8')).hexdigest()\n    return h\ndef ingest_all(args):\n    provider = 'st' if _HAS_ST else ('openai' if _HAS_OPENAI else None)\n    if provider is None and not args.index_only:\n        print('No embedding provider available. Install sentence-transformers or openai and set API key.')\n        sys.exit(1)\n    embedder = None",
+        "detail": "rag.scripts.ingest",
+        "documentation": {}
+    },
+    {
+        "label": "ingest_all",
+        "kind": 2,
+        "importPath": "rag.scripts.ingest",
+        "description": "rag.scripts.ingest",
+        "peekOfCode": "def ingest_all(args):\n    provider = 'st' if _HAS_ST else ('openai' if _HAS_OPENAI else None)\n    if provider is None and not args.index_only:\n        print('No embedding provider available. Install sentence-transformers or openai and set API key.')\n        sys.exit(1)\n    embedder = None\n    if not args.index_only:\n        embedder = Embedder(provider=provider)\n    meta = {}\n    files = sorted([p for p in DOCS_DIR.glob('*') if p.is_file()])",
+        "detail": "rag.scripts.ingest",
+        "documentation": {}
+    },
+    {
+        "label": "build_index",
+        "kind": 2,
+        "importPath": "rag.scripts.ingest",
+        "description": "rag.scripts.ingest",
+        "peekOfCode": "def build_index():\n    if not _HAS_FAISS:\n        print('faiss not available; install faiss-cpu to build index')\n        return\n    # load all embeddings and build flat index\n    meta_path = META_DIR / 'docs.json'\n    if not meta_path.exists():\n        print('no metadata found - run ingestion first')\n        return\n    with open(meta_path, 'r', encoding='utf8') as f:",
+        "detail": "rag.scripts.ingest",
+        "documentation": {}
+    },
+    {
+        "label": "PROJECT_ROOT",
+        "kind": 5,
+        "importPath": "rag.scripts.ingest",
+        "description": "rag.scripts.ingest",
+        "peekOfCode": "PROJECT_ROOT = Path(__file__).resolve().parents[2]\nRAG_DIR = PROJECT_ROOT / 'rag'\nDOCS_DIR = RAG_DIR / 'docs'\nEMB_DIR = RAG_DIR / 'embeddings'\nINDEX_DIR = RAG_DIR / 'index'\nMETA_DIR = RAG_DIR / 'meta'\nfor d in (EMB_DIR, INDEX_DIR, META_DIR):\n    d.mkdir(parents=True, exist_ok=True)\n# try optional libs\ntry:",
+        "detail": "rag.scripts.ingest",
+        "documentation": {}
+    },
+    {
+        "label": "RAG_DIR",
+        "kind": 5,
+        "importPath": "rag.scripts.ingest",
+        "description": "rag.scripts.ingest",
+        "peekOfCode": "RAG_DIR = PROJECT_ROOT / 'rag'\nDOCS_DIR = RAG_DIR / 'docs'\nEMB_DIR = RAG_DIR / 'embeddings'\nINDEX_DIR = RAG_DIR / 'index'\nMETA_DIR = RAG_DIR / 'meta'\nfor d in (EMB_DIR, INDEX_DIR, META_DIR):\n    d.mkdir(parents=True, exist_ok=True)\n# try optional libs\ntry:\n    from sentence_transformers import SentenceTransformer",
+        "detail": "rag.scripts.ingest",
+        "documentation": {}
+    },
+    {
+        "label": "DOCS_DIR",
+        "kind": 5,
+        "importPath": "rag.scripts.ingest",
+        "description": "rag.scripts.ingest",
+        "peekOfCode": "DOCS_DIR = RAG_DIR / 'docs'\nEMB_DIR = RAG_DIR / 'embeddings'\nINDEX_DIR = RAG_DIR / 'index'\nMETA_DIR = RAG_DIR / 'meta'\nfor d in (EMB_DIR, INDEX_DIR, META_DIR):\n    d.mkdir(parents=True, exist_ok=True)\n# try optional libs\ntry:\n    from sentence_transformers import SentenceTransformer\n    _HAS_ST = True",
+        "detail": "rag.scripts.ingest",
+        "documentation": {}
+    },
+    {
+        "label": "EMB_DIR",
+        "kind": 5,
+        "importPath": "rag.scripts.ingest",
+        "description": "rag.scripts.ingest",
+        "peekOfCode": "EMB_DIR = RAG_DIR / 'embeddings'\nINDEX_DIR = RAG_DIR / 'index'\nMETA_DIR = RAG_DIR / 'meta'\nfor d in (EMB_DIR, INDEX_DIR, META_DIR):\n    d.mkdir(parents=True, exist_ok=True)\n# try optional libs\ntry:\n    from sentence_transformers import SentenceTransformer\n    _HAS_ST = True\nexcept Exception:",
+        "detail": "rag.scripts.ingest",
+        "documentation": {}
+    },
+    {
+        "label": "INDEX_DIR",
+        "kind": 5,
+        "importPath": "rag.scripts.ingest",
+        "description": "rag.scripts.ingest",
+        "peekOfCode": "INDEX_DIR = RAG_DIR / 'index'\nMETA_DIR = RAG_DIR / 'meta'\nfor d in (EMB_DIR, INDEX_DIR, META_DIR):\n    d.mkdir(parents=True, exist_ok=True)\n# try optional libs\ntry:\n    from sentence_transformers import SentenceTransformer\n    _HAS_ST = True\nexcept Exception:\n    _HAS_ST = False",
+        "detail": "rag.scripts.ingest",
+        "documentation": {}
+    },
+    {
+        "label": "META_DIR",
+        "kind": 5,
+        "importPath": "rag.scripts.ingest",
+        "description": "rag.scripts.ingest",
+        "peekOfCode": "META_DIR = RAG_DIR / 'meta'\nfor d in (EMB_DIR, INDEX_DIR, META_DIR):\n    d.mkdir(parents=True, exist_ok=True)\n# try optional libs\ntry:\n    from sentence_transformers import SentenceTransformer\n    _HAS_ST = True\nexcept Exception:\n    _HAS_ST = False\ntry:",
+        "detail": "rag.scripts.ingest",
+        "documentation": {}
+    }
+]

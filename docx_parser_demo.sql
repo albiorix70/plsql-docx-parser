@@ -13,7 +13,7 @@ begin
    -- Unpack a sample DOCX file from APEX application files 
    docx_parser.unpack_docx_from_apex(
       'filename',
-      'Word2007RTFSpec9.docx',
+      'Telefon.docx',
       'blob_content',
       l_content_xml,
       l_styles_xml
@@ -186,20 +186,6 @@ begin
       ));
    end loop;
 
-   -- Extract only text elements
-   dbms_output.put_line(chr(10) || 'Extracting text elements...');
-   l_elements := docx_parser.extract_text_elements(l_content_xml);
-   dbms_output.put_line('Found '
-                        || l_elements.count || ' text elements:');
-   
-   -- Get formatted text
-   dbms_output.put_line(chr(10) || 'Formatted text output:');
-   l_formatted_text := docx_parser.get_formatted_text(l_content_xml);
-   dbms_output.put_line(dbms_lob.substr(
-      l_formatted_text,
-      4000,
-      1
-   ));
 end;
 /
 
