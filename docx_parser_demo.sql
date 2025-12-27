@@ -13,7 +13,8 @@ begin
    -- Unpack a sample DOCX file from APEX application files 
    docx_parser.unpack_docx_from_apex(
       'filename',
-      'Telefon.docx',
+      'Word2007RTFSpec9.docx',
+--      'Telefon.docx',
       'blob_content',
       l_content_xml,
       l_styles_xml

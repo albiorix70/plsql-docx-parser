@@ -49,6 +49,22 @@ create or replace package docx_parser as
       p_styles_xml in clob
    ) return t_style_list;
 
+   -- Record type for relationship entries (from .rels files)
+   type t_rels_item is record (
+         id          varchar2(200),
+         rel_type    varchar2(1000),
+         target      varchar2(2000),
+         target_mode varchar2(50)
+   );
+
+   -- PL/SQL associative array (index by relationship Id)
+   type t_rels_table is table of t_rels_item index by varchar2(200);
+
+   -- Function to parse document.xml.rels (returns associative array indexed by Relationship/@Id)
+   function parse_rels_xml (
+      p_rels_xml in clob
+   ) return t_rels_table;
+
    -- Unpack a DOCX stored in view APEX_WORKFLOW_FILES using APEX_ZIP
    -- p_id_col: name of identifier column in the view (e.g. 'id' or 'file_name')
    -- p_id_val: value to match for the identifier column
@@ -59,7 +75,8 @@ create or replace package docx_parser as
       p_id_val       in varchar2,
       p_blob_col     in varchar2,
       p_document_xml out clob,
-      p_styles_xml   out clob
+      p_styles_xml   out clob,
+      p_rels_xml     out clob
    );
 
 end docx_parser;

@@ -117,6 +117,9 @@ create or replace package body docx_parser as
                p_node xmltype path '.'
          ) x
       ) loop
+      -- Trace output
+         dbms_output.put_line('Found element: ' || p_rec.x);
+      /*
          case p_rec.x
             when 'p' then
                l_element := extract_paragraph_node(p_rec.p_node);
@@ -130,6 +133,7 @@ create or replace package body docx_parser as
          end case;
          l_elements.extend;
          l_elements(l_elements.count) := l_element;
+         */
       end loop;
 
 
@@ -247,6 +251,57 @@ create or replace package body docx_parser as
 
       return l_text_elements;
    end extract_text_elements;
+
+   -- Parse document.xml.rels into an associative PL/SQL table indexed by Relationship/@Id
+   function parse_rels_xml (
+      p_rels_xml in clob
+   ) return t_rels_table is
+      l_xml   xmltype;
+      l_rels  t_rels_table;
+      l_item  t_rels_item;
+   begin
+      if p_rels_xml is null then
+         return l_rels; -- empty
+      end if;
+      l_xml := xmltype(p_rels_xml);
+
+      for r in (
+         select x.id,
+                x.reltype,
+                x.target,
+                x.targetmode
+           from xmltable (
+                xmlnamespaces(
+                   'http://schemas.openxmlformats.org/package/2006/relationships' as "r"
+                ),
+                '/r:Relationships/r:Relationship'
+                passing l_xml
+                columns
+                   id varchar2(200) path '@Id',
+                   reltype varchar2(1000) path '@Type',
+                   target varchar2(2000) path '@Target',
+                   targetmode varchar2(50) path '@TargetMode'
+           ) x
+      ) loop
+         l_item.id := r.id;
+         l_item.rel_type := r.reltype;
+         l_item.target := r.target;
+         l_item.target_mode := r.targetmode;
+         -- store by Id
+         l_rels(r.id) := l_item;
+      end loop;
+
+      return l_rels;
+   exception
+      when others then
+         begin
+            logger.log_error('parse_rels_xml', sqlerrm);
+         exception
+            when others then
+               null;
+         end;
+         return l_rels;
+   end parse_rels_xml;
 
    function extract_paragraphs (
       p_content_xml in clob
@@ -491,7 +546,8 @@ create or replace package body docx_parser as
       p_id_val       in varchar2,
       p_blob_col     in varchar2,
       p_document_xml out clob,
-      p_styles_xml   out clob
+      p_styles_xml   out clob,
+      p_rels_xml     out clob
    ) is
 
       l_blob      blob;
@@ -503,6 +559,7 @@ create or replace package body docx_parser as
    begin
       p_document_xml := null;
       p_styles_xml := null;
+      p_rels_xml := null;
 
          -- Build dynamic SQL to select the blob column from the view
       l_sql := 'select '
@@ -580,6 +637,27 @@ create or replace package body docx_parser as
                      sqlerrm
                   );
                   p_styles_xml := null;
+            end;
+         end if;
+      end if;
+
+      -- Try to extract relationships for the main document
+      if l_dir.exists('word/_rels/document.xml.rels') then
+         l_out_blob := apex_zip.get_file_content(
+            p_zipped_blob => l_blob,
+            p_dir_entry   => l_dir('word/_rels/document.xml.rels')
+         );
+
+         if l_out_blob is not null then
+            begin
+               p_rels_xml := to_clob(l_out_blob);
+            exception
+               when others then
+                  logger.log_error(
+                     'unpack_docx_from_apex',
+                     sqlerrm
+                  );
+                  p_rels_xml := null;
             end;
          end if;
       end if;
