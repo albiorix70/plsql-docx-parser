@@ -38,12 +38,6 @@ create or replace package docx_parser as
       p_content_xml in clob
    ) return t_content_elements;
    
-   -- Function to parse content.xml with styles.xml applied
-   function parse_content_xml_with_styles (
-      p_content_xml in clob,
-      p_styles_xml  in clob
-   ) return t_content_elements;
-   
    -- Function to parse DOCX styles.xml
    function parse_styles_xml (
       p_styles_xml in clob
@@ -65,19 +59,32 @@ create or replace package docx_parser as
       p_rels_xml in clob
    ) return t_rels_table;
 
-   -- Unpack a DOCX stored in view APEX_WORKFLOW_FILES using APEX_ZIP
-   -- p_id_col: name of identifier column in the view (e.g. 'id' or 'file_name')
-   -- p_id_val: value to match for the identifier column
-   -- p_blob_col: name of the blob column containing the docx (default 'blob_content')
-   -- Returns the document.xml and styles.xml as CLOBs when present
-   procedure unpack_docx_from_apex (
-      p_id_col       in varchar2,
-      p_id_val       in varchar2,
-      p_blob_col     in varchar2,
-      p_document_xml out clob,
-      p_styles_xml   out clob,
-      p_rels_xml     out clob
+   -- Unpack a file from a DOCX blob (returns CLOB for XML files)
+   -- p_file_path: path inside the DOCX zip (e.g. 'word/document.xml')
+   -- p_docx_blob: the DOCX content as BLOB
+   -- returns: CLOB content when the target is XML
+   function unpack_docx (
+      p_file_path in varchar2,
+      p_docx_blob in blob
+   ) return clob;
+
+   -- Overloaded: return raw BLOB content for non-XML targets
+   function unpack_docx (
+      p_file_path    in varchar2,
+      p_docx_blob    in blob,
+      p_return_blob  in boolean
+   ) return blob;
+
+   -- Load DOCX from a table row into a package-internal BLOB
+   procedure load_docx_source (
+      p_table_name in varchar2,
+      p_blob_col   in varchar2,
+      p_id_col     in varchar2,
+      p_id_val     in varchar2
    );
+
+   -- Return the previously loaded DOCX (as BLOB)
+   function get_loaded_docx return blob;
 
 end docx_parser;
 /
