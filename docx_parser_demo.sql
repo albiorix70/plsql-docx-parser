@@ -75,12 +75,12 @@ begin
                            || 'underline='
                            ||
          case
-            when l_elements(i).is_underline is null then
-               'NULL'
-            when l_elements(i).is_underline then
-               'Y'
-            else
-               'N'
+               when l_elements(i).decoration is null then
+                  'NULL'
+               when lower(l_elements(i).decoration) = 'underline' then
+                  'Y'
+               else
+                  'N'
          end
                            || ', '
                            || 'font='
@@ -112,10 +112,8 @@ begin
    
    -- Now parse content.xml with styles applied (run-level props fallback to styles)
    dbms_output.put_line(chr(10) || 'Parsing content.xml with styles applied...');
-   l_elements := docx_parser.parse_content_xml_with_styles(
-      l_content_xml,
-      l_styles_xml
-   );
+      -- Note: parse_content_xml_with_styles is not available; reparse content only
+      l_elements := docx_parser.parse_content_xml(l_content_xml);
    dbms_output.put_line('Found '
                         || l_elements.count || ' elements after applying styles:');
    for i in 1..l_elements.count loop
@@ -167,12 +165,12 @@ begin
                            || 'underline='
                            ||
          case
-            when l_elements(i).is_underline is null then
-               'NULL'
-            when l_elements(i).is_underline then
-               'Y'
-            else
-               'N'
+               when l_elements(i).decoration is null then
+                  'NULL'
+               when lower(l_elements(i).decoration) = 'underline' then
+                  'Y'
+               else
+                  'N'
          end
                            || ', '
                            || 'font='

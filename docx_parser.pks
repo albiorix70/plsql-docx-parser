@@ -4,13 +4,20 @@ create or replace package docx_parser as
          element_type varchar2(50),
          text_content clob,
          style_name   varchar2(100),
+         -- styling fields mapped to pdfmake properties
+         font_name    varchar2(100),
          font_size    number,
+         line_height  number,
          is_bold      boolean,
          is_italic    boolean,
-         is_underline boolean,
          justify      varchar2(20),
+         character_spacing number,
          font_color   varchar2(50),
-         font_name    varchar2(100)
+         bgcolor      varchar2(50),
+         decoration   varchar2(50),
+         decoration_style varchar2(50),
+         decoration_color varchar2(50)
+        
    );
    
    -- Table type for multiple elements
@@ -21,17 +28,23 @@ create or replace package docx_parser as
    type t_style_info is record (
          style_id     varchar2(100),
          style_name   varchar2(100),
+         -- mapped style properties for pdfmake
+         font_name    varchar2(100),
          font_size    number,
+         line_height  number,
          is_bold      boolean,
          is_italic    boolean,
-         is_underline boolean,
+         justify      varchar2(20),
+         character_spacing number,
          font_color   varchar2(50),
-         font_name    varchar2(100)
+         bgcolor      varchar2(50),
+         decoration   varchar2(50),
+         decoration_style varchar2(50),
+         decoration_color varchar2(50)
    );
    
-   -- Table type for multiple styles
-   type t_style_list is
-      table of t_style_info;
+   -- Associative table (index by style id) for styles
+   type t_style_list is table of t_style_info index by varchar2(100);
    
    -- Function to parse DOCX content.xml
    function parse_content_xml (
@@ -58,6 +71,12 @@ create or replace package docx_parser as
    function parse_rels_xml (
       p_rels_xml in clob
    ) return t_rels_table;
+
+   -- Parse a single paragraph node (`w:p`). Extracts `w:pPr` as CLOB and concatenates runs.
+   function parse_paragraph_node (
+      p_node in xmltype,
+      p_styles in t_style_list
+   ) return t_content_element;
 
    -- Unpack a file from a DOCX blob (returns CLOB for XML files)
    -- p_file_path: path inside the DOCX zip (e.g. 'word/document.xml')

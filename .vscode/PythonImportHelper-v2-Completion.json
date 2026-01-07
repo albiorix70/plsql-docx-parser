@@ -1,14 +1,5 @@
 [
     {
-        "label": "os",
-        "kind": 6,
-        "isExtraImport": true,
-        "importPath": "os",
-        "description": "os",
-        "detail": "os",
-        "documentation": {}
-    },
-    {
         "label": "sys",
         "kind": 6,
         "isExtraImport": true,
@@ -18,153 +9,139 @@
         "documentation": {}
     },
     {
-        "label": "argparse",
+        "label": "Document",
+        "importPath": "docx",
+        "description": "docx",
+        "isExtraImport": true,
+        "detail": "docx",
+        "documentation": {}
+    },
+    {
+        "label": "OxmlElement",
+        "importPath": "docx.oxml",
+        "description": "docx.oxml",
+        "isExtraImport": true,
+        "detail": "docx.oxml",
+        "documentation": {}
+    },
+    {
+        "label": "qn",
+        "importPath": "docx.oxml.ns",
+        "description": "docx.oxml.ns",
+        "isExtraImport": true,
+        "detail": "docx.oxml.ns",
+        "documentation": {}
+    },
+    {
+        "label": "Pt",
+        "importPath": "docx.shared",
+        "description": "docx.shared",
+        "isExtraImport": true,
+        "detail": "docx.shared",
+        "documentation": {}
+    },
+    {
+        "label": "Inches",
+        "importPath": "docx.shared",
+        "description": "docx.shared",
+        "isExtraImport": true,
+        "detail": "docx.shared",
+        "documentation": {}
+    },
+    {
+        "label": "Image",
+        "importPath": "PIL",
+        "description": "PIL",
+        "isExtraImport": true,
+        "detail": "PIL",
+        "documentation": {}
+    },
+    {
+        "label": "ImageDraw",
+        "importPath": "PIL",
+        "description": "PIL",
+        "isExtraImport": true,
+        "detail": "PIL",
+        "documentation": {}
+    },
+    {
+        "label": "ImageFont",
+        "importPath": "PIL",
+        "description": "PIL",
+        "isExtraImport": true,
+        "detail": "PIL",
+        "documentation": {}
+    },
+    {
+        "label": "os",
         "kind": 6,
         "isExtraImport": true,
-        "importPath": "argparse",
-        "description": "argparse",
-        "detail": "argparse",
+        "importPath": "os",
+        "description": "os",
+        "detail": "os",
         "documentation": {}
     },
     {
-        "label": "json",
-        "kind": 6,
-        "isExtraImport": true,
-        "importPath": "json",
-        "description": "json",
-        "detail": "json",
-        "documentation": {}
-    },
-    {
-        "label": "Path",
-        "importPath": "pathlib",
-        "description": "pathlib",
-        "isExtraImport": true,
-        "detail": "pathlib",
-        "documentation": {}
-    },
-    {
-        "label": "sha1",
-        "importPath": "hashlib",
-        "description": "hashlib",
-        "isExtraImport": true,
-        "detail": "hashlib",
-        "documentation": {}
-    },
-    {
-        "label": "numpy",
-        "kind": 6,
-        "isExtraImport": true,
-        "importPath": "numpy",
-        "description": "numpy",
-        "detail": "numpy",
-        "documentation": {}
-    },
-    {
-        "label": "tqdm",
-        "importPath": "tqdm",
-        "description": "tqdm",
-        "isExtraImport": true,
-        "detail": "tqdm",
-        "documentation": {}
-    },
-    {
-        "label": "Embedder",
-        "kind": 6,
-        "importPath": "rag.scripts.ingest",
-        "description": "rag.scripts.ingest",
-        "peekOfCode": "class Embedder:\n    def __init__(self, provider='st'):\n        self.provider = provider\n        if provider == 'st':\n            if not _HAS_ST:\n                raise RuntimeError('sentence-transformers not available')\n            self.model = SentenceTransformer('all-MiniLM-L6-v2')\n        elif provider == 'openai':\n            if not _HAS_OPENAI:\n                raise RuntimeError('openai package not available')",
-        "detail": "rag.scripts.ingest",
-        "documentation": {}
-    },
-    {
-        "label": "extract_text",
+        "label": "main",
         "kind": 2,
         "importPath": "rag.scripts.ingest",
         "description": "rag.scripts.ingest",
-        "peekOfCode": "def extract_text(path: Path) -> str:\n    suffix = path.suffix.lower()\n    if suffix == '.txt':\n        return path.read_text(encoding='utf-8', errors='ignore')\n    if suffix == '.docx':\n        try:\n            from docx import Document\n        except Exception:\n            raise RuntimeError('python-docx not installed (pip install python-docx)')\n        doc = Document(path)",
+        "peekOfCode": "def main():\n    print('RAG ingestion disabled for this repository.')\nif __name__ == '__main__':\n    main()",
         "detail": "rag.scripts.ingest",
         "documentation": {}
     },
     {
-        "label": "doc_id_for_path",
+        "label": "insert_toc",
         "kind": 2,
-        "importPath": "rag.scripts.ingest",
-        "description": "rag.scripts.ingest",
-        "peekOfCode": "def doc_id_for_path(path: Path) -> str:\n    # stable id based on file path\n    h = sha1(str(path).encode('utf-8')).hexdigest()\n    return h\ndef ingest_all(args):\n    provider = 'st' if _HAS_ST else ('openai' if _HAS_OPENAI else None)\n    if provider is None and not args.index_only:\n        print('No embedding provider available. Install sentence-transformers or openai and set API key.')\n        sys.exit(1)\n    embedder = None",
-        "detail": "rag.scripts.ingest",
+        "importPath": "scripts.generate_test_docx",
+        "description": "scripts.generate_test_docx",
+        "peekOfCode": "def insert_toc(doc):\n    p = doc.add_paragraph()\n    fld = OxmlElement('w:fldSimple')\n    fld.set(qn('w:instr'), 'TOC \\\\o \"1-3\" \\\\h \\\\z \\\\u')\n    p._p.append(fld)\ndef make_image(path):\n    # Create a simple placeholder image\n    img = Image.new('RGB', (600, 300), color=(200, 220, 255))\n    d = ImageDraw.Draw(img)\n    try:",
+        "detail": "scripts.generate_test_docx",
         "documentation": {}
     },
     {
-        "label": "ingest_all",
+        "label": "make_image",
         "kind": 2,
-        "importPath": "rag.scripts.ingest",
-        "description": "rag.scripts.ingest",
-        "peekOfCode": "def ingest_all(args):\n    provider = 'st' if _HAS_ST else ('openai' if _HAS_OPENAI else None)\n    if provider is None and not args.index_only:\n        print('No embedding provider available. Install sentence-transformers or openai and set API key.')\n        sys.exit(1)\n    embedder = None\n    if not args.index_only:\n        embedder = Embedder(provider=provider)\n    meta = {}\n    files = sorted([p for p in DOCS_DIR.glob('*') if p.is_file()])",
-        "detail": "rag.scripts.ingest",
+        "importPath": "scripts.generate_test_docx",
+        "description": "scripts.generate_test_docx",
+        "peekOfCode": "def make_image(path):\n    # Create a simple placeholder image\n    img = Image.new('RGB', (600, 300), color=(200, 220, 255))\n    d = ImageDraw.Draw(img)\n    try:\n        fnt = ImageFont.truetype('arial.ttf', 24)\n    except Exception:\n        fnt = ImageFont.load_default()\n    d.text((20, 120), 'Placeholder Image', font=fnt, fill=(10, 10, 80))\n    img.save(path)",
+        "detail": "scripts.generate_test_docx",
         "documentation": {}
     },
     {
-        "label": "build_index",
+        "label": "add_header_footer",
         "kind": 2,
-        "importPath": "rag.scripts.ingest",
-        "description": "rag.scripts.ingest",
-        "peekOfCode": "def build_index():\n    if not _HAS_FAISS:\n        print('faiss not available; install faiss-cpu to build index')\n        return\n    # load all embeddings and build flat index\n    meta_path = META_DIR / 'docs.json'\n    if not meta_path.exists():\n        print('no metadata found - run ingestion first')\n        return\n    with open(meta_path, 'r', encoding='utf8') as f:",
-        "detail": "rag.scripts.ingest",
+        "importPath": "scripts.generate_test_docx",
+        "description": "scripts.generate_test_docx",
+        "peekOfCode": "def add_header_footer(section):\n    header = section.header\n    header_para = header.paragraphs[0] if header.paragraphs else header.add_paragraph()\n    header_para.text = 'Test Document Header'\n    footer = section.footer\n    footer_para = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()\n    footer_para.text = 'Page ' \nif __name__ == '__main__':\n    os.makedirs(os.path.dirname(OUT), exist_ok=True)\n    doc = Document()",
+        "detail": "scripts.generate_test_docx",
         "documentation": {}
     },
     {
-        "label": "PROJECT_ROOT",
+        "label": "OUT",
         "kind": 5,
-        "importPath": "rag.scripts.ingest",
-        "description": "rag.scripts.ingest",
-        "peekOfCode": "PROJECT_ROOT = Path(__file__).resolve().parents[2]\nRAG_DIR = PROJECT_ROOT / 'rag'\nDOCS_DIR = RAG_DIR / 'docs'\nEMB_DIR = RAG_DIR / 'embeddings'\nINDEX_DIR = RAG_DIR / 'index'\nMETA_DIR = RAG_DIR / 'meta'\nfor d in (EMB_DIR, INDEX_DIR, META_DIR):\n    d.mkdir(parents=True, exist_ok=True)\n# try optional libs\ntry:",
-        "detail": "rag.scripts.ingest",
+        "importPath": "scripts.generate_test_docx",
+        "description": "scripts.generate_test_docx",
+        "peekOfCode": "OUT = os.path.join(os.path.dirname(__file__), '..', 'test_doc.docx')\nIMG = os.path.join(os.path.dirname(__file__), 'test_image.png')\nLOREM = (\n    \"Lorem ipsum dolor sit amet, consectetur adipiscing elit. \"\n    \"Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. \"\n)\ndef insert_toc(doc):\n    p = doc.add_paragraph()\n    fld = OxmlElement('w:fldSimple')\n    fld.set(qn('w:instr'), 'TOC \\\\o \"1-3\" \\\\h \\\\z \\\\u')",
+        "detail": "scripts.generate_test_docx",
         "documentation": {}
     },
     {
-        "label": "RAG_DIR",
+        "label": "IMG",
         "kind": 5,
-        "importPath": "rag.scripts.ingest",
-        "description": "rag.scripts.ingest",
-        "peekOfCode": "RAG_DIR = PROJECT_ROOT / 'rag'\nDOCS_DIR = RAG_DIR / 'docs'\nEMB_DIR = RAG_DIR / 'embeddings'\nINDEX_DIR = RAG_DIR / 'index'\nMETA_DIR = RAG_DIR / 'meta'\nfor d in (EMB_DIR, INDEX_DIR, META_DIR):\n    d.mkdir(parents=True, exist_ok=True)\n# try optional libs\ntry:\n    from sentence_transformers import SentenceTransformer",
-        "detail": "rag.scripts.ingest",
+        "importPath": "scripts.generate_test_docx",
+        "description": "scripts.generate_test_docx",
+        "peekOfCode": "IMG = os.path.join(os.path.dirname(__file__), 'test_image.png')\nLOREM = (\n    \"Lorem ipsum dolor sit amet, consectetur adipiscing elit. \"\n    \"Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. \"\n)\ndef insert_toc(doc):\n    p = doc.add_paragraph()\n    fld = OxmlElement('w:fldSimple')\n    fld.set(qn('w:instr'), 'TOC \\\\o \"1-3\" \\\\h \\\\z \\\\u')\n    p._p.append(fld)",
+        "detail": "scripts.generate_test_docx",
         "documentation": {}
     },
     {
-        "label": "DOCS_DIR",
+        "label": "LOREM",
         "kind": 5,
-        "importPath": "rag.scripts.ingest",
-        "description": "rag.scripts.ingest",
-        "peekOfCode": "DOCS_DIR = RAG_DIR / 'docs'\nEMB_DIR = RAG_DIR / 'embeddings'\nINDEX_DIR = RAG_DIR / 'index'\nMETA_DIR = RAG_DIR / 'meta'\nfor d in (EMB_DIR, INDEX_DIR, META_DIR):\n    d.mkdir(parents=True, exist_ok=True)\n# try optional libs\ntry:\n    from sentence_transformers import SentenceTransformer\n    _HAS_ST = True",
-        "detail": "rag.scripts.ingest",
-        "documentation": {}
-    },
-    {
-        "label": "EMB_DIR",
-        "kind": 5,
-        "importPath": "rag.scripts.ingest",
-        "description": "rag.scripts.ingest",
-        "peekOfCode": "EMB_DIR = RAG_DIR / 'embeddings'\nINDEX_DIR = RAG_DIR / 'index'\nMETA_DIR = RAG_DIR / 'meta'\nfor d in (EMB_DIR, INDEX_DIR, META_DIR):\n    d.mkdir(parents=True, exist_ok=True)\n# try optional libs\ntry:\n    from sentence_transformers import SentenceTransformer\n    _HAS_ST = True\nexcept Exception:",
-        "detail": "rag.scripts.ingest",
-        "documentation": {}
-    },
-    {
-        "label": "INDEX_DIR",
-        "kind": 5,
-        "importPath": "rag.scripts.ingest",
-        "description": "rag.scripts.ingest",
-        "peekOfCode": "INDEX_DIR = RAG_DIR / 'index'\nMETA_DIR = RAG_DIR / 'meta'\nfor d in (EMB_DIR, INDEX_DIR, META_DIR):\n    d.mkdir(parents=True, exist_ok=True)\n# try optional libs\ntry:\n    from sentence_transformers import SentenceTransformer\n    _HAS_ST = True\nexcept Exception:\n    _HAS_ST = False",
-        "detail": "rag.scripts.ingest",
-        "documentation": {}
-    },
-    {
-        "label": "META_DIR",
-        "kind": 5,
-        "importPath": "rag.scripts.ingest",
-        "description": "rag.scripts.ingest",
-        "peekOfCode": "META_DIR = RAG_DIR / 'meta'\nfor d in (EMB_DIR, INDEX_DIR, META_DIR):\n    d.mkdir(parents=True, exist_ok=True)\n# try optional libs\ntry:\n    from sentence_transformers import SentenceTransformer\n    _HAS_ST = True\nexcept Exception:\n    _HAS_ST = False\ntry:",
-        "detail": "rag.scripts.ingest",
+        "importPath": "scripts.generate_test_docx",
+        "description": "scripts.generate_test_docx",
+        "peekOfCode": "LOREM = (\n    \"Lorem ipsum dolor sit amet, consectetur adipiscing elit. \"\n    \"Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. \"\n)\ndef insert_toc(doc):\n    p = doc.add_paragraph()\n    fld = OxmlElement('w:fldSimple')\n    fld.set(qn('w:instr'), 'TOC \\\\o \"1-3\" \\\\h \\\\z \\\\u')\n    p._p.append(fld)\ndef make_image(path):",
+        "detail": "scripts.generate_test_docx",
         "documentation": {}
     }
 ]
