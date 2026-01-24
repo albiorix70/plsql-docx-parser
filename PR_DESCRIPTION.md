@@ -1,8 +1,7 @@
 # Commits
 ## Subject c4fef174a42b0589069731180874c0eac81473d0
 
-* chore(parser+tests+rag): DOCX-Parser (XMLTABLE), Styles, utPLSQL-Tests, RAG-Scaffold, .gitignore-Aufräumen
-Ausführliche Übersicht (Body)
+* DOCX-Parser (XMLTABLE), Styles, utPLSQL-Tests, .gitignore-Aufräumen
 
 ## Ausführliche Übersicht
 
@@ -20,10 +19,6 @@ Ausführliche Übersicht (Body)
   * Zeigt Parsing-Ergebnisse, Styles‑Anwendung und DBMS_OUTPUT Ausgabe.
 * test_docx_parser.sql : utPLSQL Test‑Suite hinzugefügt
   * Vollständige Suite mit Tests: einfacher Paragraph, leere Eingabe, mehrere Runs mit Run‑Props, Styles‑Parsing, Style‑Inheritance & Override.
-* rag (Folder)
-  *  .gitignore, README.md
-  * ingest.py, requirements.txt
-  * Grundgerüst für RAG-Ingestion (Text‑Extraction, Chunking, Embeddings, FAISS index - Startercode).
 * Root .gitignore
   * Neu angelegt: pdfmake, *.rtf, *.docx, *.xml (Regeln von .gitignore nach root verschoben).
 * .gitignore
@@ -36,6 +31,5 @@ Ausführliche Übersicht (Body)
 * Wechsel von fragilem String‑Parsing zu XMLTYPE/XMLTABLE macht den Parser zuverlässiger und einfacher erweiterbar.
 * Styles werden korrekt aus styles.xml auf Runs angewandt (Fallback-Logik).
 * utPLSQL‑Tests bilden Basis für automatisierte Regressionstests.
-* RAG‑Scaffold erleichtert späteres Ingest & Embedding‑Workflows.
 * .gitignore + Index‑Bereinigung halten das Repo schlank und vermeiden Commit großer Binaries.
 
