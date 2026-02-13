@@ -1,0 +1,10 @@
+## Repository-level .gitignore
+# Ignore pdfmake build/artifacts
+pdfmake/
+
+
+# Optionally ignore other generated files
+node_modules/
+.venv/
+scripts/
+sample_data/
