@@ -8,6 +8,5 @@ set feedback on
 @docx_parser.pks
 @docx_parser.pkb
 
-show errors package docx_parser_util
+show errors
 
--- exit

@@ -1,27 +1,7 @@
 create or replace package docx_parser_util as
-   -- Record type to hold style information (shared utility types)
-   type t_style_info is record (
-         style_id          varchar2(100),
-         style_name        varchar2(100),
-         font_name         varchar2(100),
-         font_size         number,
-         line_height       number,
-         is_bold           boolean,
-         is_italic         boolean,
-         justify           varchar2(20),
-         character_spacing number,
-         font_color        varchar2(50),
-         bgcolor           varchar2(50),
-         decoration        varchar2(50),
-         decoration_style  varchar2(50),
-         decoration_color  varchar2(50)
-   );
-
-   -- Associative table (index by style id) for styles
-   type t_style_list is
-      table of t_style_info index by varchar2(100);
-
-   -- Record type for relationship entries (from .rels files)
+   /**
+    * Record type for relationship entries parsed from `.rels` files.
+    */
    type t_rels_item is record (
          id          varchar2(200),
          rel_type    varchar2(1000),
@@ -29,7 +9,9 @@ create or replace package docx_parser_util as
          target_mode varchar2(50)
    );
 
-   -- PL/SQL associative array (index by relationship Id)
+   /**
+    * PL/SQL associative array (index by relationship id).
+    */
    type t_rels_table is
       table of t_rels_item index by varchar2(200);
 
@@ -47,9 +29,13 @@ create or replace package docx_parser_util as
     */
    function get_styles_by_id (
       p_style_id in varchar2
-   ) return t_style_info;
+   ) return json_object_t;
 
-   -- Function to parse document.xml.rels (returns associative array indexed by Relationship/@Id)
+   /**
+    * Parse `document.xml.rels` and return relationships indexed by `Relationship/@Id`.
+    * @param p_rels_xml CLOB containing the contents of `document.xml.rels`
+    * @return t_rels_table associative array keyed by relationship id
+    */
    function parse_rels_xml (
       p_rels_xml in clob
    ) return t_rels_table;
@@ -73,13 +59,13 @@ create or replace package docx_parser_util as
     */
    function styles_to_json return clob;
 
-   /**
+    /**
     * Unpack a file from a DOCX BLOB and return its content as CLOB for XML targets.
     * @param p_file_path path inside the DOCX zip (e.g. 'word/document.xml')
     * @param p_docx_blob DOCX file content as BLOB
     * @return CLOB content of the requested file when it is an XML file, otherwise NULL
     */
-   function unpack_docx (
+   function unpack_docx_clob (
       p_file_path in varchar2,
       p_docx_blob in blob
    ) return clob;
@@ -91,10 +77,9 @@ create or replace package docx_parser_util as
     * @param p_return_blob flag indicating caller expects a BLOB result
     * @return BLOB content of the requested file, or NULL if not found
     */
-   function unpack_docx (
-      p_file_path   in varchar2,
-      p_docx_blob   in blob,
-      p_return_blob in boolean
+   function unpack_docx_blob (
+      p_file_path in varchar2,
+      p_docx_blob in blob
    ) return blob;
 
    /**

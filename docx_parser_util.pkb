@@ -4,12 +4,10 @@ create or replace package body docx_parser_util as
    g_loaded_docx  blob;
 
    -- package-internal storage for parsed styles
-   type t_tyle_list is
-      table of json_object_t index by varchar2(100);
-   lg_style_list  t_style_list;
    type t_used_styles is
       table of boolean index by varchar2(100);
    lg_used_styles t_used_styles;
+   lg_style_json  json_object_t;
 
    /**
     * Parse DOCX `styles.xml` and populate the package-internal styles associative array.
@@ -18,108 +16,144 @@ create or replace package body docx_parser_util as
    procedure parse_styles_xml (
       p_styles_xml in clob
    ) is
-      l_styles t_style_list; -- associative table index by style id
-      l_xml    xmltype;
    begin
+      lg_style_json := json_object_t('{}');
       if p_styles_xml is null then
          return;
       end if;
-      l_xml := xmltype(p_styles_xml);
 
       -- Use XMLTable to extract styles and basic rPr values
       for s_rec in (
          select x.style_id,
                 x.style_name,
                 x.sz,
-                x.b,
-                x.i,
-                x.uval,
+                x.bold,
+                x.italic,
+                x.u_val,
                 x.u_color,
                 x.color,
-                x.char_spacing,
-                x.p_line,
-                x.pjc,
-                x.shd_fill,
-                x.rfonts,
+                x.p_charspacing,
+                x.p_lineheight,
+                x.justify,
+                x.bg_color,
+                x.font_names,
                 x.strike
            from xmltable ( xmlnamespaces ( 'http://schemas.openxmlformats.org/wordprocessingml/2006/main' as "w" ),
          '/w:styles/w:style'
-               passing l_xml
+               passing xmltype(p_styles_xml)
             columns
                style_id varchar2(100) path '@w:styleId',
                style_name varchar2(200) path 'w:name/@w:val',
                sz varchar2(20) path 'w:rPr/w:sz/@w:val',
-               b varchar2(1) path 'w:rPr/w:b',
-               i varchar2(1) path 'w:rPr/w:i',
-               uval varchar2(20) path 'w:rPr/w:u/@w:val',
+               bold varchar2(1) path 'w:rPr/w:b',
+               italic varchar2(1) path 'w:rPr/w:i',
+               justify varchar2(20) path 'w:pPr/w:jc/@w:val',
+               u_val varchar2(20) path 'w:rPr/w:u/@w:val',
                u_color varchar2(20) path 'w:rPr/w:u/@w:color',
                color varchar2(20) path 'w:rPr/w:color/@w:val',
-               char_spacing varchar2(20) path 'w:rPr/w:spacing/@w:val',
-               p_line varchar2(20) path 'w:pPr/w:spacing/@w:line',
-               pjc varchar2(20) path 'w:pPr/w:jc/@w:val',
-               shd_fill varchar2(20) path 'w:rPr/w:shd/@w:fill',
-               rfonts varchar2(100) path 'w:rPr/w:rFonts/@w:ascii',
+               p_charspacing varchar2(20) path 'w:rPr/w:spacing/@w:val',
+               p_lineheight varchar2(20) path 'w:pPr/w:spacing/@w:line',
+               bg_color varchar2(20) path 'w:rPr/w:shd/@w:fill',
+               font_names varchar2(100) path 'w:rPr/w:rFonts/@w:ascii',
                strike varchar2(1) path 'w:rPr/w:strike'
          ) x
       ) loop
          declare
-            l_style t_style_info;
+            l_tmp json_object_t := json_object_t();
          begin
-            l_style.style_id := s_rec.style_id;
-            l_style.style_name := s_rec.style_name;
+            -- map extracted values to t_style_info record
+            l_tmp.put(
+               'styleName',
+               s_rec.style_name
+            );
+            l_tmp.put(
+               'styleId',
+               s_rec.style_id
+            );
+            -- font size (in half-points in DOCX)
             if s_rec.sz is not null then
-               l_style.font_size := to_number ( s_rec.sz default null on conversion error ) / 2;
-            else
-               l_style.font_size := null;
+               l_tmp.put(
+                  'fontSize',
+                  to_number(s_rec.sz default null on conversion error) / 2
+               );
             end if;
-            l_style.is_bold :=
-               case
-                  when s_rec.b is not null then
-                     true
-                  else
-                     false
-               end;
-            l_style.is_italic :=
-               case
-                  when s_rec.i is not null then
-                     true
-                  else
-                     false
-               end;
+            if s_rec.bold is not null then
+               l_tmp.put(
+                  'isBold',
+                  true
+               );
+            end if;
+
+            -- italics
+            if s_rec.italic is not null then
+               l_tmp.put(
+                  'isItalic',
+                  true
+               );
+            end if;
+
+            -- paragraph justification
+            if s_rec.justify is not null then
+               l_tmp.put(
+                  'alignment',
+                  s_rec.justify
+               );
+            end if;
+
             -- character spacing
-            if s_rec.char_spacing is not null then
-               l_style.character_spacing := to_number ( s_rec.char_spacing default null on conversion error );
-            else
-               l_style.character_spacing := null;
+            if s_rec.p_charspacing is not null then
+               l_tmp.put(
+                  'characterSpacing',
+                  to_number(s_rec.p_charspacing default null on conversion error)
+               );
             end if;
             -- paragraph line height (as provided in the style)
-            if s_rec.p_line is not null then
-               l_style.line_height := to_number ( s_rec.p_line default null on conversion error );
-            else
-               l_style.line_height := null;
+            if s_rec.p_lineheight is not null then
+               l_tmp.put(
+                  'lineHeight',
+                  to_number(s_rec.p_lineheight default null on conversion error)
+               );
             end if;
-            -- paragraph justification
-            l_style.justify := s_rec.pjc;
-            l_style.font_color := s_rec.color;
-            l_style.bgcolor := s_rec.shd_fill;
-            l_style.font_name := s_rec.rfonts;
+
+            if s_rec.color is not null then
+               l_tmp.put(
+                  'color',
+                  s_rec.color
+               );
+            end if;
+
+            if s_rec.bg_color is not null then
+               l_tmp.put(
+                  'background',
+                  s_rec.bg_color
+               );
+            end if;
+            --l_style.font_name := s_rec.font_names;
             -- decoration: underline or strike
-            if
-               s_rec.uval is not null
-               and lower(s_rec.uval) <> 'none'
-            then
-               l_style.decoration := 'underline';
-               l_style.decoration_style := s_rec.uval;
-               l_style.decoration_color := s_rec.u_color;
-            elsif s_rec.strike is not null then
-               l_style.decoration := 'lineThrough';
-            else
-               l_style.decoration := null;
-               l_style.decoration_style := null;
-               l_style.decoration_color := null;
+            if s_rec.strike is not null then
+               s_rec.u_val := 'lineThrough';
             end if;
-            -- store by style id
-            l_styles(s_rec.style_id) := l_style;
+            if
+               s_rec.u_val is not null
+               and lower(s_rec.u_val) <> 'none'
+            then
+               l_tmp.put(
+                  'decoration',
+                  s_rec.u_val
+               );
+               if s_rec.u_color is not null then
+                  l_tmp.put(
+                     'decorationColor',
+                     s_rec.u_color
+                  );
+               end if;
+            end if;
+            -- add style to json object
+            lg_style_json.put(
+               s_rec.style_name,
+               l_tmp
+            );
+            lg_used_styles(s_rec.style_id) := false; -- initialize usage tracking
          end;
       end loop;
 
@@ -129,130 +163,17 @@ create or replace package body docx_parser_util as
       p_style_id in varchar2
    ) is
    begin
-      if p_style_id is null then
-         return;
+      if p_style_id is not null then
+         lg_used_styles(p_style_id) := true;
       end if;
-      lg_used_styles(p_style_id) := true;
    end mark_style_used;
 
    function styles_to_json return clob is
-      l_idx    varchar2(100);
-      l_json   clob := '{';
-      l_first  boolean := true;
-      l_props  clob;
-      l_style  t_style_info;
-      l_top    number;
-      l_bottom number;
    begin
-      l_idx := lg_used_styles.first;
-      while l_idx is not null loop
-         begin
-            l_style := lg_style_list(l_idx);
-         exception
-            when others then
-               l_idx := lg_used_styles.next(l_idx);
-               continue;
-         end;
-
-         if not l_first then
-            l_json := l_json || ',';
-         else
-            l_first := false;
-         end if;
-
-         l_props := '';
-         if l_style.font_size is not null then
-            l_props := l_props
-                       || '"fontSize":'
-                       || round(l_style.font_size)
-                       || ',';
-            l_top := round(l_style.font_size * 0.66);
-            l_bottom := round(l_style.font_size * 0.5);
-         else
-            l_top := 0;
-            l_bottom := 12;
-         end if;
-         if l_style.is_bold then
-            l_props := l_props || '"bold":true,';
-         end if;
-         if l_style.is_italic then
-            l_props := l_props || '"italics":true,';
-         end if;
-         if l_style.justify is not null then
-            l_props := l_props
-                       || '"alignment":"'
-                       || lower(l_style.justify)
-                       || '",';
-         end if;
-         if l_style.font_color is not null then
-            l_props := l_props
-                       || '"color":"'
-                       || l_style.font_color
-                       || '",';
-         end if;
-         if l_style.bgcolor is not null then
-            l_props := l_props
-                       || '"fillColor":"'
-                       || l_style.bgcolor
-                       || '",';
-         end if;
-         if l_style.character_spacing is not null then
-            l_props := l_props
-                       || '"characterSpacing":'
-                       || l_style.character_spacing
-                       || ',';
-         end if;
-         if l_style.decoration is not null then
-            l_props := l_props
-                       || '"decoration":"'
-                       || l_style.decoration
-                       || '",';
-         end if;
-
-         -- margin
-         l_props := l_props
-                    || '"margin":['
-                    || 0
-                    || ','
-                    || l_top
-                    || ','
-                    || 0
-                    || ','
-                    || l_bottom
-                    || '],';
-
-         -- remove trailing comma if present
-         if substr(
-            l_props,
-            -1,
-            1
-         ) = ',' then
-            l_props := substr(
-               l_props,
-               1,
-               length(l_props) - 1
-            );
-         end if;
-
-         l_json := l_json
-                   || '"'
-                   || replace(
-            l_idx,
-            '"',
-            '\"'
-         )
-                   || '":{'
-                   || l_props
-                   || '}';
-
-         l_idx := lg_used_styles.next(l_idx);
-      end loop;
-
-      l_json := l_json || '}';
-      return l_json;
+      return lg_style_json.to_string;
    exception
       when others then
-         return '{ }';
+         return '{}';
    end styles_to_json;
 
    /**
@@ -262,13 +183,13 @@ create or replace package body docx_parser_util as
     */
    function get_styles_by_id (
       p_style_id in varchar2
-   ) return t_style_info is
+   ) return json_object_t is
    begin
-      return lg_style_list(p_style_id);
+      return lg_style_json.get_object(p_style_id);
    exception
       when others then
          -- return empty record if style id not found
-         return t_style_info();
+         return json_object_t('{}');
    end get_styles_by_id;
 
    -- Parse document.xml.rels into an associative PL/SQL table indexed by Relationship/@Id
@@ -328,7 +249,7 @@ create or replace package body docx_parser_util as
     * @param p_docx_blob DOCX file content as BLOB
     * @return CLOB content of the requested file when it is an XML file, otherwise NULL
     */
-   function unpack_docx (
+   function unpack_docx_clob (
       p_file_path in varchar2,
       p_docx_blob in blob
    ) return clob is
@@ -352,7 +273,7 @@ create or replace package body docx_parser_util as
             exception
                when others then
                   logger.log_error(
-                     'unpack_docx',
+                     'unpack_docx_clob',
                      sqlerrm
                   );
                   return null;
@@ -364,7 +285,7 @@ create or replace package body docx_parser_util as
       when others then
          begin
             logger.log_error(
-               'unpack_docx',
+               'unpack_docx_clob',
                sqlerrm
             );
          exception
@@ -372,7 +293,7 @@ create or replace package body docx_parser_util as
                null;
          end;
          return null;
-   end unpack_docx;
+   end unpack_docx_clob;
 
    /**
     * Overloaded: Unpack a file from a DOCX BLOB and return raw BLOB content.
@@ -381,10 +302,9 @@ create or replace package body docx_parser_util as
     * @param p_return_blob flag indicating caller expects a BLOB result
     * @return BLOB content of the requested file, or NULL if not found
     */
-   function unpack_docx (
-      p_file_path   in varchar2,
-      p_docx_blob   in blob,
-      p_return_blob in boolean
+   function unpack_docx_blob (
+      p_file_path in varchar2,
+      p_docx_blob in blob
    ) return blob is
       l_dir      apex_zip.t_dir_entries;
       l_out_blob blob;
@@ -405,7 +325,7 @@ create or replace package body docx_parser_util as
       when others then
          begin
             logger.log_error(
-               'unpack_docx(blob)',
+               'unpack_docx_blob',
                sqlerrm
             );
          exception
@@ -413,7 +333,7 @@ create or replace package body docx_parser_util as
                null;
          end;
          return null;
-   end unpack_docx;
+   end unpack_docx_blob;
 
    /**
     * Load a DOCX BLOB from a database table row into package-internal storage.
