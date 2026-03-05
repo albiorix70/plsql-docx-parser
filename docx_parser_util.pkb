@@ -1,13 +1,36 @@
 create or replace package body docx_parser_util as
 
    -- package-internal storage for a loaded DOCX BLOB
-   g_loaded_docx  blob;
+   g_loaded_docx blob;
 
-   -- package-internal storage for parsed styles
-   type t_used_styles is
-      table of boolean index by varchar2(100);
-   lg_used_styles t_used_styles;
-   lg_style_json  json_object_t;
+   -- Private: extract a raw BLOB from a DOCX ZIP entry.
+   -- Returns NULL when the path does not exist or the input is NULL.
+   function get_docx_file_blob (
+      p_file_path in varchar2,
+      p_docx_blob in blob
+   ) return blob is
+      l_dir apex_zip.t_dir_entries;
+   begin
+      if p_docx_blob is null then
+         return null;
+      end if;
+      l_dir := apex_zip.get_dir_entries(p_zipped_blob => p_docx_blob);
+      if l_dir.exists(p_file_path) then
+         return apex_zip.get_file_content(
+            p_zipped_blob => p_docx_blob,
+            p_dir_entry   => l_dir(p_file_path)
+         );
+      end if;
+      return null;
+   exception
+      when others then
+         begin
+            logger.log_error('get_docx_file_blob', sqlerrm);
+         exception
+            when others then null;
+         end;
+         return null;
+   end get_docx_file_blob;
 
    /**
     * Unpack a file from a DOCX BLOB and return its content as CLOB for XML targets.
@@ -19,44 +42,20 @@ create or replace package body docx_parser_util as
       p_file_path in varchar2,
       p_docx_blob in blob
    ) return clob is
-      l_dir      apex_zip.t_dir_entries;
-      l_out_blob blob;
-      l_clob     clob;
+      l_raw blob;
    begin
-      if p_docx_blob is null then
+      l_raw := get_docx_file_blob(p_file_path, p_docx_blob);
+      if l_raw is null then
          return null;
       end if;
-      l_dir := apex_zip.get_dir_entries(p_zipped_blob => p_docx_blob);
-      if l_dir.exists(p_file_path) then
-         l_out_blob := apex_zip.get_file_content(
-            p_zipped_blob => p_docx_blob,
-            p_dir_entry   => l_dir(p_file_path)
-         );
-         if l_out_blob is not null then
-            begin
-               l_clob := to_clob(l_out_blob);
-               return l_clob;
-            exception
-               when others then
-                  logger.log_error(
-                     'unpack_docx_clob',
-                     sqlerrm
-                  );
-                  return null;
-            end;
-         end if;
-      end if;
-      return null;
+      -- Use xmltype to handle the UTF-8 encoding declared in DOCX XML files correctly.
+      return xmltype(l_raw, nls_charset_id('AL32UTF8')).getClobVal();
    exception
       when others then
          begin
-            logger.log_error(
-               'unpack_docx_clob',
-               sqlerrm
-            );
+            logger.log_error('unpack_docx_clob', sqlerrm);
          exception
-            when others then
-               null;
+            when others then null;
          end;
          return null;
    end unpack_docx_clob;
@@ -65,40 +64,14 @@ create or replace package body docx_parser_util as
     * Overloaded: Unpack a file from a DOCX BLOB and return raw BLOB content.
     * @param p_file_path path inside the DOCX zip
     * @param p_docx_blob DOCX file content as BLOB
-    * @param p_return_blob flag indicating caller expects a BLOB result
     * @return BLOB content of the requested file, or NULL if not found
     */
    function unpack_docx_blob (
       p_file_path in varchar2,
       p_docx_blob in blob
    ) return blob is
-      l_dir      apex_zip.t_dir_entries;
-      l_out_blob blob;
    begin
-      if p_docx_blob is null then
-         return null;
-      end if;
-      l_dir := apex_zip.get_dir_entries(p_zipped_blob => p_docx_blob);
-      if l_dir.exists(p_file_path) then
-         l_out_blob := apex_zip.get_file_content(
-            p_zipped_blob => p_docx_blob,
-            p_dir_entry   => l_dir(p_file_path)
-         );
-         return l_out_blob;
-      end if;
-      return null;
-   exception
-      when others then
-         begin
-            logger.log_error(
-               'unpack_docx_blob',
-               sqlerrm
-            );
-         exception
-            when others then
-               null;
-         end;
-         return null;
+      return get_docx_file_blob(p_file_path, p_docx_blob);
    end unpack_docx_blob;
 
    /**
@@ -114,8 +87,8 @@ create or replace package body docx_parser_util as
       p_id_col     in varchar2,
       p_id_val     in varchar2
    ) is
-      l_sql  varchar2(2000);
-      l_blob blob;
+      l_sql varchar2(2000);
+      l_msg varchar2(2000);
    begin
       g_loaded_docx := null;
       l_sql := 'select '
@@ -127,34 +100,16 @@ create or replace package body docx_parser_util as
                || ' = :1';
       begin
          execute immediate l_sql
-           into l_blob
+            into g_loaded_docx
             using p_id_val;
-         g_loaded_docx := l_blob;
       exception
          when no_data_found then
-            logger.log_error(
-               'load_docx_source',
-               'No row found for '
-               || p_table_name
-               || '.'
-               || p_id_col
-               || '='
-               || p_id_val
-            );
-            raise_application_error(
-               -20002,
-               'No row found for '
-               || p_table_name
-               || '.'
-               || p_id_col
-               || '='
-               || p_id_val
-            );
+            l_msg := 'No row found for '
+                     || p_table_name || '.' || p_id_col || '=' || p_id_val;
+            logger.log_error('load_docx_source', l_msg);
+            raise_application_error(-20002, l_msg);
          when others then
-            logger.log_error(
-               'load_docx_source',
-               sqlerrm
-            );
+            logger.log_error('load_docx_source', sqlerrm);
             raise;
       end;
    end load_docx_source;
