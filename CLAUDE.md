@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code when working with code in this repository.
 
 ## Project Overview
 
-Oracle PL/SQL packages for parsing DOCX files inside an Oracle APEX environment. The parsed content is a pdfmake-compatible JSON array intended for downstream PDF generation. All runtime dependencies (`apex_zip`, `dbms_xmldom`) are provided by the Oracle/APEX platform.
+Oracle PL/SQL packages for parsing DOCX and ODT files inside an Oracle APEX environment. The parsed content is a pdfmake-compatible JSON object (`docDefinition`) intended for downstream PDF generation. All runtime dependencies are provided by the Oracle/APEX platform.
 
 ## Build & Compile
 
@@ -15,74 +15,93 @@ Compile all packages in dependency order using SQL*Plus:
 @compile_docs_parser.sql
 ```
 
-This runs: `docx_parser_util.pks` → `docx_parser_util.pkb` → `docx_parser.pks` → `docx_parser.pkb`
+Compile order:
+1. `docx_parser_util.pks` → `docx_parser_util.pkb`
+2. `docx_parser.pks` → `docx_parser.pkb`
+3. `odt_parser.pks` → `odt_parser.pkb`
 
-VS Code tasks (`.vscode/tasks.json`) reference CI scripts that are not yet in the repo:
-- `./ci/run_compile.sh` (Bash) / `.\ci\run_compile.ps1` (PowerShell)
-- `./ci/run_mcp_cli.sh` / `.\ci\run_mcp_cli.ps1`
+## PL/SQL Conventions
 
-## Running Tests
+- Declare all variables **before** local subprograms in declaration sections — Oracle raises PLS-00stadard error otherwise
+- `VARCHAR2` max size is **32767** in PL/SQL but **4000** in SQL contexts (XMLTABLE columns, SELECT INTO)
+- Do not use `dbms_output` calls in production code
+- Do not use deprecated DOM APIs — `getElementsByTagNameNS` is gone since 19c; use `getElementsByTagName(element, name, ns)` with a root element, not a document
+- `dbms_xmldom.getElementsByTagName` signature: `(DOMElement, name, ns)` — element first, then name, then namespace URI
 
-Tests use **utPLSQL**. Run individual suites from SQL*Plus:
+## Code Standards
 
-```sql
--- Full parser suite
-exec ut.run('test_docx_parser');
+- `XMLTABLE` column paths: keep all `varchar2` sizes at ≤ 4000 (SQL limit)
+- DOM traversal: always guard with `getNodeType = ELEMENT_NODE` before calling `makeElement`
+- Namespace URIs are declared as package-level constants — never inline string literals
 
--- Rels and unpack suite
-exec ut.run('tests.test_docx_parser_rels');
+---
 
--- Styles JSON manual test (not utPLSQL, just runs inline)
-@tests/test_styles_json.sql
-```
+## DOCX Parser
 
-Upload a real DOCX blob for integration tests:
+### Packages
 
-```bash
-python scripts/generate_test_docx.py        # generates tests/test_doc.docx
-python scripts/upload_test_docx.py          # uploads to DB table test_docx_store (id=1)
-# or PowerShell:
-powershell scripts/upload_test_docx.ps1
-```
-
-Manual testlauf (ad-hoc execution in SQL*Plus):
-
-```sql
-@scripts/testlauf.sql
-```
-
-## Package Architecture
-
-### `docx_parser` (top-level parser)
-
-**Public API**: `parse_docx(p_filename VARCHAR2) RETURN CLOB`
-
-Loads the DOCX from `APEX_WORKSPACE_STATIC_FILES` (column `FILE_CONTENT`, keyed by `FILE_NAME`), unpacks `word/document.xml`, and returns the full document as a JSON array of pdfmake paragraph objects.
-
-**Package-body state**
-
-| Symbol | Kind | Purpose |
-|---|---|---|
-| `l_namespaces` | `t_ns` (assoc. array) | Namespace prefix → URI map, populated from root element attributes |
-| `c_lf` | constant `varchar2(1)` | Line break — `chr(10)`; used for `w:br` (default/textWrapping) |
-| `c_ff` | constant `varchar2(1)` | Page break — `chr(12)`; used for `w:br w:type="page"` |
-| `c_tab` | constant `varchar2(1)` | Horizontal tab — `chr(9)`; used for `w:tab` |
-| `c_exception_no_body` | exception | Raised (ORA-20001) when `w:body` is not found |
-| `c_exception_no_childnodes` | exception | Raised (ORA-20002) when `w:body` has no children |
-
-**Private functions**
-
-| Function | Purpose |
+| File | Role |
 |---|---|
-| `set_namespaces(node)` | Reads `xmlns:*` attributes from the document root into `l_namespaces` |
-| `parse_run_node(node)` → `json_object_t` | Parses a `w:r` element: `w:rPr` → character styles; `w:t` → text; `w:br` → `c_lf`/`c_ff`; `w:tab` → `c_tab` |
-| `parse_paragraph(node)` → `json_object_t` | Parses a `w:p` element: collects `w:pPr` styles + array of `parse_run_node` results into `{"text":[...], ...pPrStyles}` |
+| `docx_parser.pks` / `.pkb` | Top-level parser — public API |
+| `docx_parser_util.pks` / `.pkb` | Utility layer — ZIP extraction, DOM helpers, unit converters |
 
-**Body dispatch loop** iterates `w:body` children:
-- `w:p` → `parse_paragraph` → appended to result array
-- `w:tbl` → exits loop (table processing not yet implemented; avoids trailing empty paragraphs)
+### Public API — `docx_parser`
 
-**Output shape** (one element per `w:p`):
+```sql
+function parse_docx(p_filename in varchar2) return clob;
+```
+
+Loads the DOCX BLOB from `APEX_WORKSPACE_STATIC_FILES` (keyed by `FILE_NAME`), unpacks `word/document.xml`, and returns the full document as a pdfmake JSON array.
+
+### Public API — `docx_parser_util`
+
+| Function / Procedure | Purpose |
+|---|---|
+| `unpack_docx_clob(path, blob)` | Extract ZIP entry as UTF-8 CLOB |
+| `unpack_docx_blob(path, blob)` | Extract ZIP entry as raw BLOB |
+| `load_docx_source(table, col, id_col, id_val)` | Load DOCX BLOB from any DB table into `g_loaded_docx`; uses `dbms_assert.simple_sql_name` to prevent SQL injection |
+| `get_loaded_docx()` | Return session-cached DOCX BLOB |
+| `get_style_attributes(node [, ns])` | Convert `w:pPr` / `w:rPr` DOM node → pdfmake `json_object_t` |
+| `el_get_attribute(el, attr_name, ns)` | Read namespace-qualified attribute via `dbms_xmldom.getAttribute(elem, ns, name)` |
+| `el_is_toggle_on(el, attr_name, ns)` | TRUE unless `w:val` is `"false"`, `"0"`, or `"off"` |
+| `dxa_to_pt(v)` | twips → points |
+| `halfpt_to_pt(v)` | half-points → points (`w:sz` font sizes) |
+| `hundredthpt_to_pt(v)` | hundredths of a point → points (character spacing) |
+| `eighthpt_to_pt(v)` | eighth-points → points (border widths) |
+| `emu_to_pt(v)` | EMU → points (DrawingML dimensions) |
+| `lineunit_to_pt(v)` | line units → points (absolute; 240 units = 12 pt) |
+| `fiftieth_to_pt(v, page_w_dxa)` | fiftieths-of-percent → points (table widths `w:type="pct"`) |
+
+### `get_style_attributes` — OOXML → pdfmake mappings
+
+| OOXML attribute | pdfmake key | Notes |
+|---|---|---|
+| `w:rPr/w:b` | `bold` | toggle property |
+| `w:rPr/w:i` | `italics` | toggle property |
+| `w:rPr/w:u` | `decoration: "underline"` | skipped when `w:val="none"` |
+| `w:rPr/w:strike` | `decoration: "lineThrough"` | toggle property |
+| `w:rPr/w:color/@w:val` | `color` | `#RRGGBB`; skipped when `"auto"` |
+| `w:rPr/w:sz/@w:val` | `fontSize` | half-points ÷ 2 |
+| `w:rPr/w:spacing/@w:val` | `characterSpacing` | hundredths ÷ 100 |
+| `w:pPr/w:pStyle/@w:val` | `style` | style name pass-through |
+| `w:pPr/w:jc/@w:val` | `alignment` | `"both"` → `"justify"` |
+| `w:pPr/w:spacing/@w:line` | `lineHeight` | multiplier (÷ 240); 240 = 1.0× |
+| `w:pPr/w:spacing/@w:before` | `marginTop` | dxa → pt |
+| `w:pPr/w:spacing/@w:after` | `marginBottom` | dxa → pt |
+| `w:pPr/w:ind/@w:left` | `marginLeft` | dxa → pt |
+| `w:pPr/w:ind/@w:firstLine` | `indent` | dxa → pt |
+
+### DOCX ZIP paths
+
+| Path | Purpose |
+|---|---|
+| `word/document.xml` | Main document body |
+| `word/styles.xml` | Paragraph and character style definitions |
+| `word/_rels/document.xml.rels` | Relationships (images, hyperlinks) |
+| `word/numbering.xml` | List/numbering definitions |
+
+### Output shape
+
 ```json
 [
   { "style": "Normal", "alignment": "justify", "text": [
@@ -95,78 +114,87 @@ Loads the DOCX from `APEX_WORKSPACE_STATIC_FILES` (column `FILE_CONTENT`, keyed 
 
 ---
 
-### `docx_parser_util` (utility layer)
+## ODT Parser
 
-Stateful package — the loaded DOCX BLOB is held in the package-global `g_loaded_docx` for the session.
+### Package
 
-**Public API**
-
-| Function/Procedure | Purpose |
+| File | Role |
 |---|---|
-| `unpack_docx_clob(path, blob)` | Extracts a ZIP entry as UTF-8 CLOB (`xmltype` conversion); returns NULL if not found |
-| `unpack_docx_blob(path, blob)` | Extracts a ZIP entry as raw BLOB; returns NULL if not found |
-| `load_docx_source(table, col, id_col, id_val)` | Dynamically loads a DOCX BLOB from any DB table into `g_loaded_docx`; raises ORA-20002 if no row found |
-| `get_loaded_docx()` | Returns the session-cached DOCX BLOB |
-| `get_style_attributes(node [, ns])` | Converts a `w:pPr` or `w:rPr` DOM node to a pdfmake-compatible `json_object_t` |
-| `el_get_attribute(el, attr_name, ns)` | Reads a namespace-qualified attribute from a DOM element via `dbms_xmldom.getattribute(elem, ns, name)` |
-| `el_is_toggle_on(el, attr_name, ns)` | Returns TRUE unless `w:val` is `"false"`, `"0"`, or `"off"` (handles toggle properties like `w:b`, `w:i`) |
-| `dxa_to_pt(v)` | twips → points (page layout, spacing) |
-| `halfpt_to_pt(v)` | half-points → points (`w:sz` font sizes) |
-| `hundredthpt_to_pt(v)` | hundredths of a point → points (character spacing) |
-| `eighthpt_to_pt(v)` | eighth-points → points (border widths `w:bdr`) |
-| `emu_to_pt(v)` | EMU → points (DrawingML image dimensions) |
-| `lineunit_to_pt(v)` | line units → points (`w:spacing/@w:line` as absolute pt) |
-| `fiftieth_to_pt(v, page_w_dxa)` | fiftieths-of-percent → points (table widths `w:type="pct"`) |
+| `odt_parser.pks` / `.pkb` | Single self-contained package |
 
-**Private helper**
+### Public API
 
-| | |
-|---|---|
-| `get_docx_file_blob(path, blob)` | Shared primitive for all ZIP extraction; centralises `apex_zip` interaction and exception handling |
+```sql
+-- Full parse from raw BLOB
+function parse_odt(p_odt_blob in blob) return clob;
 
-**`get_style_attributes` — supported mappings**
+-- Low-level: pass already-extracted XML CLOBs (useful for testing)
+function parse_xml(
+  p_content_xml in clob,
+  p_styles_xml  in clob default null
+) return clob;
+```
 
-| OOXML | pdfmake key | Notes |
+### Architecture
+
+| Section | Procedure / Function | Purpose |
 |---|---|---|
-| `w:rPr/w:b` | `bold` | boolean; toggle property |
-| `w:rPr/w:i` | `italics` | boolean; toggle property |
-| `w:rPr/w:u` | `decoration: "underline"` | skipped when `w:val="none"` |
-| `w:rPr/w:strike` | `decoration: "lineThrough"` | toggle property |
-| `w:rPr/w:color/@w:val` | `color` | prefixed `#RRGGBB`; skipped when `"auto"` |
-| `w:rPr/w:sz/@w:val` | `fontSize` | half-points ÷ 2 |
-| `w:rPr/w:rFonts` | *(disabled)* | font mapping commented out — requires pdfmake font registration |
-| `w:rPr/w:spacing/@w:val` | `characterSpacing` | hundredths of a point ÷ 100 |
-| `w:pPr/w:pStyle/@w:val` | `style` | style name pass-through |
-| `w:pPr/w:jc/@w:val` | `alignment` | `"both"` → `"justify"`; others pass through |
-| `w:pPr/w:spacing/@w:line` | `lineHeight` | **multiplier** (line units ÷ 240); 240 = 1.0× |
-| `w:pPr/w:spacing/@w:before` | `marginTop` | dxa → pt |
-| `w:pPr/w:spacing/@w:after` | `marginBottom` | dxa → pt |
-| `w:pPr/w:ind/@w:left` | `marginLeft` | dxa → pt |
-| `w:pPr/w:ind/@w:firstLine` | `indent` | dxa → pt |
+| Utility | `unzip_member(zip, name)` | Extract ODT ZIP entry → CLOB via `apex_zip` |
+| Utility | `map_color(odf_color)` | ODF `fo:color` → pdfmake color string |
+| Utility | `map_alignment(odf_align)` | ODF `fo:text-align` → pdfmake alignment |
+| Utility | `odf_length_to_pt(len)` | ODF length string (pt/cm/mm/in/px) → points |
+| Utility | `dom_get_attr(elem, ns, name)` | Null-safe `dbms_xmldom.getAttribute` wrapper |
+| Utility | `dom_get_text(node)` | Recursive text collector; handles `text:s`, `text:tab`, `text:line-break` |
+| Style | `write_style_props(...)` | Write pdfmake style key-value pairs into open `apex_json` object |
+| Style | `write_styles(styles_xml, content_xml)` | Emit `"styles"` and `"defaultStyle"` JSON keys; merges named styles from `styles.xml` and automatic styles from `content.xml`; only emits styles referenced in the document |
+| Content | `write_paragraph(node, style, level)` | Emit paragraph or heading JSON node |
+| Content | `write_table(node)` | Emit pdfmake table node |
+| Content | `write_list(node, style, is_ordered)` | Emit `ul` / `ol` node |
+| Content | `write_content(content_xml)` | Iterate `office:text` children and dispatch to above writers |
 
-## Key Conventions
+### Style sourcing
 
-- Both packages use `dbms_xmldom` DOM API exclusively for XML traversal — no `XMLTABLE`.
-- Font sizes in DOCX are stored as half-points; use `halfpt_to_pt()` (divides by 2) to get points.
-- `lineHeight` is a **multiplier** (`line_units / 240`), not an absolute point value — `lineunit_to_pt` is for absolute conversions only.
-- `dbms_assert.simple_sql_name` is used in `load_docx_source` to prevent SQL injection from dynamic table/column names.
-- `nls_charset_id('AL32UTF8')` is cached as the package constant `c_utf8_csid` (evaluated once at package init) and used in `unpack_docx_clob` for safe BLOB→CLOB conversion via `xmltype`.
-- `el_get_attribute` uses the three-argument `dbms_xmldom.getattribute(elem, ns, name)` form — namespace is always passed explicitly. The default namespace is `c_ooxml_ns_w` (`http://schemas.openxmlformats.org/wordprocessingml/2006/main`).
-- Non-element DOM nodes (text nodes, comment nodes) are skipped with a `getnodetype != element_node` guard before any `makeelement` call.
-- Character format constants (`c_lf`, `c_ff`, `c_tab`) are declared at package-body level in `docx_parser` to avoid `chr()` literals scattered through run-parsing logic.
+Styles are collected from two sources and merged before emission:
+- `styles.xml` — named styles (`office:styles` + `office:automatic-styles`)
+- `content.xml` — document-local automatic styles (`office:automatic-styles`)
 
-## DOCX Internal Structure (relevant paths)
+Only styles actually referenced via `@text:style-name` or `@table:style-name` in content.xml are written to the output. Ordered list detection checks style name for `NUMBER`, `NUMER`, `ENUM`, or `OL`.
 
-| Path inside ZIP | Purpose |
+### ODT ZIP paths
+
+| Path | Purpose |
 |---|---|
-| `word/document.xml` | Main document body |
-| `word/styles.xml` | Paragraph and character style definitions |
-| `word/_rels/document.xml.rels` | Relationships (images, hyperlinks, etc.) |
-| `word/numbering.xml` | List/numbering definitions |
+| `content.xml` | Document body + automatic styles |
+| `styles.xml` | Named paragraph / character styles + default style |
 
-## Dependencies
+### Output shape
 
-- Oracle APEX (for `apex_zip` package — ZIP extraction)
-- Oracle built-ins: `dbms_xmldom`, `dbms_assert`, `xmltype`, `json_object_t`, `json_array_t`
-- utPLSQL (test framework)
-- Python 3.8+ with `python-docx`, `Pillow` (for test DOCX generation only)
+```json
+{
+  "content": [
+    { "text": "Heading", "style": "Heading1", "headlineLevel": 1 },
+    { "text": "Plain paragraph", "style": "Text_Body" },
+    { "text": [{ "text": "Bold " }, { "text": "word", "style": "T1" }], "style": "P1" },
+    { "table": { "widths": ["*", "*"], "body": [[{ "text": "Cell" }]] } },
+    { "ul": ["item 1", "item 2"] }
+  ],
+  "styles": {
+    "Text_Body": { "fontSize": 12, "alignment": "justify" },
+    "P1": { "basedOn": "Text_Body", "marginTop": 6 }
+  },
+  "defaultStyle": { "fontSize": 12 }
+}
+```
+
+---
+
+## Runtime Dependencies
+
+| Dependency | Used by | Purpose |
+|---|---|---|
+| `apex_zip` | both parsers | ZIP extraction from BLOB |
+| `apex_json` | `odt_parser` | JSON output generation |
+| `dbms_xmldom` | both parsers | DOM-based XML traversal |
+| `dbms_assert` | `docx_parser_util` | SQL injection prevention in dynamic queries |
+| `xmltype` | both parsers | XML parsing |
+| `json_object_t`, `json_array_t` | `docx_parser` | JSON construction |
