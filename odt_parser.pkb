@@ -1,38 +1,40 @@
 create or replace package body odt_parser as
 
   -- Namespace URI constants
-  c_ns_office constant varchar2(100) := 'urn:oasis:names:tc:opendocument:xmlns:office:1.0';
-  c_ns_style  constant varchar2(100) := 'urn:oasis:names:tc:opendocument:xmlns:style:1.0';
-  c_ns_fo     constant varchar2(100) := 'urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0';
-  c_ns_text   constant varchar2(100) := 'urn:oasis:names:tc:opendocument:xmlns:text:1.0';
-  c_ns_table  constant varchar2(100) := 'urn:oasis:names:tc:opendocument:xmlns:table:1.0';
+   c_ns_office constant varchar2(100) := 'urn:oasis:names:tc:opendocument:xmlns:office:1.0';
+   c_ns_style  constant varchar2(100) := 'urn:oasis:names:tc:opendocument:xmlns:style:1.0';
+   c_ns_fo     constant varchar2(100) := 'urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0';
+   c_ns_text   constant varchar2(100) := 'urn:oasis:names:tc:opendocument:xmlns:text:1.0';
+   c_ns_table  constant varchar2(100) := 'urn:oasis:names:tc:opendocument:xmlns:table:1.0';
 
   -- ---------------------------------------------------------------------------
   -- Package-body-level style types and map.
   -- Declared here so write_paragraph can access resolved styles inline,
   -- even though it runs before write_styles outputs the JSON styles object.
   -- ---------------------------------------------------------------------------
-  type t_sty is record (
-        style_name  varchar2(200),
-        family      varchar2(50),
-        parent      varchar2(200),   -- null after inheritance is resolved
-        text_align  varchar2(30),
-        margin_top  varchar2(20),
-        margin_bot  varchar2(20),
-        margin_lft  varchar2(20),
-        line_height varchar2(20),
-        font_name   varchar2(100),
-        font_size   varchar2(20),
-        font_weight varchar2(20),
-        font_style  varchar2(20),
-        text_deco   varchar2(50),
-        color       varchar2(20),
-        bg_color    varchar2(20)
-  );
-  type t_sty_tab is table of t_sty;   -- bulk-collect target
-  type t_sty_map is table of t_sty index by varchar2(200);
+   type t_sty is record (
+         style_name  varchar2(200),
+         family      varchar2(50),
+         parent      varchar2(200),   -- null after inheritance is resolved
+         text_align  varchar2(30),
+         margin_top  varchar2(20),
+         margin_bot  varchar2(20),
+         margin_lft  varchar2(20),
+         line_height varchar2(20),
+         font_name   varchar2(100),
+         font_size   varchar2(20),
+         font_weight varchar2(20),
+         font_style  varchar2(20),
+         text_deco   varchar2(50),
+         color       varchar2(20),
+         bg_color    varchar2(20)
+   );
+   type t_sty_tab is
+      table of t_sty;   -- bulk-collect target
+   type t_sty_map is
+      table of t_sty index by varchar2(200);
   -- Populated by load_styles; accessible to write_paragraph and write_styles
-  g_style_map t_sty_map;
+   g_style_map t_sty_map;
 
   -- ===========================================================================
   -- SECTION 1 – PRIVATE UTILITY HELPERS
@@ -200,12 +202,12 @@ create or replace package body odt_parser as
    * Returns NULL on any error.
    */
    function dom_get_attr (
-      p_elem in dbms_xmldom.DOMElement,
+      p_elem in dbms_xmldom.domelement,
       p_ns   in varchar2,
       p_name in varchar2
    ) return varchar2 is
    begin
-      return dbms_xmldom.getAttribute(
+      return dbms_xmldom.getattribute(
          p_elem,
          p_ns,
          p_name
@@ -221,30 +223,34 @@ create or replace package body odt_parser as
    * recurses into element children for everything else.
    */
    function dom_get_text (
-      p_node in dbms_xmldom.DOMNode
+      p_node in dbms_xmldom.domnode
    ) return varchar2 is
       l_result   varchar2(32767) := '';
-      l_children dbms_xmldom.DOMNodeList;
-      l_child    dbms_xmldom.DOMNode;
+      l_children dbms_xmldom.domnodelist;
+      l_child    dbms_xmldom.domnode;
       l_ntype    pls_integer;
       l_lname    varchar2(200);
    begin
-      l_ntype := dbms_xmldom.getNodeType(p_node);
-      if l_ntype = dbms_xmldom.TEXT_NODE then
-         return dbms_xmldom.getNodeValue(p_node);
+      l_ntype := dbms_xmldom.getnodetype(p_node);
+      if l_ntype = dbms_xmldom.text_node then
+         return dbms_xmldom.getnodevalue(p_node);
       end if;
-      if l_ntype != dbms_xmldom.ELEMENT_NODE then
+      if l_ntype != dbms_xmldom.element_node then
          return '';
       end if;
-      l_lname := dbms_xmldom.getLocalName(
-         dbms_xmldom.makeElement(p_node)
-      );
-      if l_lname = 's'          then return ' ';     end if;
-      if l_lname = 'tab'        then return chr(9);  end if;
-      if l_lname = 'line-break' then return chr(10); end if;
-      l_children := dbms_xmldom.getChildNodes(p_node);
-      for i in 0..dbms_xmldom.getLength(l_children) - 1 loop
-         l_child  := dbms_xmldom.item(
+      l_lname := dbms_xmldom.getlocalname(dbms_xmldom.makeelement(p_node));
+      if l_lname = 's' then
+         return ' ';
+      end if;
+      if l_lname = 'tab' then
+         return chr(9);
+      end if;
+      if l_lname = 'line-break' then
+         return chr(10);
+      end if;
+      l_children := dbms_xmldom.getchildnodes(p_node);
+      for i in 0..dbms_xmldom.getlength(l_children) - 1 loop
+         l_child := dbms_xmldom.item(
             l_children,
             i
          );
@@ -429,7 +435,7 @@ create or replace package body odt_parser as
       if not g_style_map.exists(p_name) then
          return;
       end if;
-      l_sty   := g_style_map(p_name);
+      l_sty := g_style_map(p_name);
       l_pname := l_sty.parent;
       if l_pname is null
       or not g_style_map.exists(l_pname) then
@@ -437,18 +443,42 @@ create or replace package body odt_parser as
       end if;
       resolve_inheritance(l_pname);        -- depth-first
       l_par := g_style_map(l_pname);
-      if l_sty.font_name   is null then l_sty.font_name   := l_par.font_name;   end if;
-      if l_sty.font_size   is null then l_sty.font_size   := l_par.font_size;   end if;
-      if l_sty.font_weight is null then l_sty.font_weight := l_par.font_weight; end if;
-      if l_sty.font_style  is null then l_sty.font_style  := l_par.font_style;  end if;
-      if l_sty.text_deco   is null then l_sty.text_deco   := l_par.text_deco;   end if;
-      if l_sty.color       is null then l_sty.color       := l_par.color;       end if;
-      if l_sty.bg_color    is null then l_sty.bg_color    := l_par.bg_color;    end if;
-      if l_sty.text_align  is null then l_sty.text_align  := l_par.text_align;  end if;
-      if l_sty.margin_top  is null then l_sty.margin_top  := l_par.margin_top;  end if;
-      if l_sty.margin_bot  is null then l_sty.margin_bot  := l_par.margin_bot;  end if;
-      if l_sty.margin_lft  is null then l_sty.margin_lft  := l_par.margin_lft;  end if;
-      if l_sty.line_height is null then l_sty.line_height := l_par.line_height; end if;
+      if l_sty.font_name is null then
+         l_sty.font_name := l_par.font_name;
+      end if;
+      if l_sty.font_size is null then
+         l_sty.font_size := l_par.font_size;
+      end if;
+      if l_sty.font_weight is null then
+         l_sty.font_weight := l_par.font_weight;
+      end if;
+      if l_sty.font_style is null then
+         l_sty.font_style := l_par.font_style;
+      end if;
+      if l_sty.text_deco is null then
+         l_sty.text_deco := l_par.text_deco;
+      end if;
+      if l_sty.color is null then
+         l_sty.color := l_par.color;
+      end if;
+      if l_sty.bg_color is null then
+         l_sty.bg_color := l_par.bg_color;
+      end if;
+      if l_sty.text_align is null then
+         l_sty.text_align := l_par.text_align;
+      end if;
+      if l_sty.margin_top is null then
+         l_sty.margin_top := l_par.margin_top;
+      end if;
+      if l_sty.margin_bot is null then
+         l_sty.margin_bot := l_par.margin_bot;
+      end if;
+      if l_sty.margin_lft is null then
+         l_sty.margin_lft := l_par.margin_lft;
+      end if;
+      if l_sty.line_height is null then
+         l_sty.line_height := l_par.line_height;
+      end if;
       l_sty.parent := null;             -- mark resolved; breaks cycles
       g_style_map(p_name) := l_sty;
    end resolve_inheritance;
@@ -493,32 +523,28 @@ create or replace package body odt_parser as
                 x.bg_color
          bulk collect
            into l_buf
-           from xmltable (
-                   xmlnamespaces (
-                      'urn:oasis:names:tc:opendocument:xmlns:office:1.0' as "office",
-                      'urn:oasis:names:tc:opendocument:xmlns:style:1.0'  as "style",
-                      'urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0' as "fo"
-                   ),
-                   '//(office:styles|office:automatic-styles)/style:style
+           from xmltable ( xmlnamespaces ( 'urn:oasis:names:tc:opendocument:xmlns:office:1.0' as "office",'urn:oasis:names:tc:opendocument:xmlns:style:1.0'
+           as "style",'urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0' as "fo" ),
+         '//(office:styles|office:automatic-styles)/style:style
                       [@style:family="paragraph" or @style:family="text"]'
-                   passing xmltype(p_styles_xml)
-                   columns
-                      style_name  varchar2(200) path '@style:name',
-                      family      varchar2(50)  path '@style:family',
-                      parent      varchar2(200) path '@style:parent-style-name',
-                      text_align  varchar2(30)  path 'style:paragraph-properties/@fo:text-align',
-                      margin_top  varchar2(20)  path 'style:paragraph-properties/@fo:margin-top',
-                      margin_bot  varchar2(20)  path 'style:paragraph-properties/@fo:margin-bottom',
-                      margin_lft  varchar2(20)  path 'style:paragraph-properties/@fo:margin-left',
-                      line_height varchar2(20)  path 'style:paragraph-properties/@fo:line-height',
-                      font_name   varchar2(100) path 'style:text-properties/@style:font-name',
-                      font_size   varchar2(20)  path 'style:text-properties/@fo:font-size',
-                      font_weight varchar2(20)  path 'style:text-properties/@fo:font-weight',
-                      font_style  varchar2(20)  path 'style:text-properties/@fo:font-style',
-                      text_deco   varchar2(50)  path 'style:text-properties/@fo:text-decoration-line',
-                      color       varchar2(20)  path 'style:text-properties/@fo:color',
-                      bg_color    varchar2(20)  path 'style:text-properties/@fo:background-color'
-                ) x;
+               passing xmltype(p_styles_xml)
+            columns
+               style_name varchar2(200) path '@style:name',
+               family varchar2(50) path '@style:family',
+               parent varchar2(200) path '@style:parent-style-name',
+               text_align varchar2(30) path 'style:paragraph-properties/@fo:text-align',
+               margin_top varchar2(20) path 'style:paragraph-properties/@fo:margin-top',
+               margin_bot varchar2(20) path 'style:paragraph-properties/@fo:margin-bottom',
+               margin_lft varchar2(20) path 'style:paragraph-properties/@fo:margin-left',
+               line_height varchar2(20) path 'style:paragraph-properties/@fo:line-height',
+               font_name varchar2(100) path 'style:text-properties/@style:font-name',
+               font_size varchar2(20) path 'style:text-properties/@fo:font-size',
+               font_weight varchar2(20) path 'style:text-properties/@fo:font-weight',
+               font_style varchar2(20) path 'style:text-properties/@fo:font-style',
+               text_deco varchar2(50) path 'style:text-properties/@fo:text-decoration-line',
+               color varchar2(20) path 'style:text-properties/@fo:color',
+               bg_color varchar2(20) path 'style:text-properties/@fo:background-color'
+         ) x;
 
          for i in 1..l_buf.count loop
             g_style_map(l_buf(i).style_name) := l_buf(i);
@@ -544,32 +570,28 @@ create or replace package body odt_parser as
                 x.bg_color
          bulk collect
            into l_buf
-           from xmltable (
-                   xmlnamespaces (
-                      'urn:oasis:names:tc:opendocument:xmlns:office:1.0' as "office",
-                      'urn:oasis:names:tc:opendocument:xmlns:style:1.0'  as "style",
-                      'urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0' as "fo"
-                   ),
-                   '//office:automatic-styles/style:style
+           from xmltable ( xmlnamespaces ( 'urn:oasis:names:tc:opendocument:xmlns:office:1.0' as "office",'urn:oasis:names:tc:opendocument:xmlns:style:1.0'
+           as "style",'urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0' as "fo" ),
+         '//office:automatic-styles/style:style
                       [@style:family="paragraph" or @style:family="text"]'
-                   passing xmltype(p_content_xml)
-                   columns
-                      style_name  varchar2(200) path '@style:name',
-                      family      varchar2(50)  path '@style:family',
-                      parent      varchar2(200) path '@style:parent-style-name',
-                      text_align  varchar2(30)  path 'style:paragraph-properties/@fo:text-align',
-                      margin_top  varchar2(20)  path 'style:paragraph-properties/@fo:margin-top',
-                      margin_bot  varchar2(20)  path 'style:paragraph-properties/@fo:margin-bottom',
-                      margin_lft  varchar2(20)  path 'style:paragraph-properties/@fo:margin-left',
-                      line_height varchar2(20)  path 'style:paragraph-properties/@fo:line-height',
-                      font_name   varchar2(100) path 'style:text-properties/@style:font-name',
-                      font_size   varchar2(20)  path 'style:text-properties/@fo:font-size',
-                      font_weight varchar2(20)  path 'style:text-properties/@fo:font-weight',
-                      font_style  varchar2(20)  path 'style:text-properties/@fo:font-style',
-                      text_deco   varchar2(50)  path 'style:text-properties/@fo:text-decoration-line',
-                      color       varchar2(20)  path 'style:text-properties/@fo:color',
-                      bg_color    varchar2(20)  path 'style:text-properties/@fo:background-color'
-                ) x;
+               passing xmltype(p_content_xml)
+            columns
+               style_name varchar2(200) path '@style:name',
+               family varchar2(50) path '@style:family',
+               parent varchar2(200) path '@style:parent-style-name',
+               text_align varchar2(30) path 'style:paragraph-properties/@fo:text-align',
+               margin_top varchar2(20) path 'style:paragraph-properties/@fo:margin-top',
+               margin_bot varchar2(20) path 'style:paragraph-properties/@fo:margin-bottom',
+               margin_lft varchar2(20) path 'style:paragraph-properties/@fo:margin-left',
+               line_height varchar2(20) path 'style:paragraph-properties/@fo:line-height',
+               font_name varchar2(100) path 'style:text-properties/@style:font-name',
+               font_size varchar2(20) path 'style:text-properties/@fo:font-size',
+               font_weight varchar2(20) path 'style:text-properties/@fo:font-weight',
+               font_style varchar2(20) path 'style:text-properties/@fo:font-style',
+               text_deco varchar2(50) path 'style:text-properties/@fo:text-decoration-line',
+               color varchar2(20) path 'style:text-properties/@fo:color',
+               bg_color varchar2(20) path 'style:text-properties/@fo:background-color'
+         ) x;
 
          for i in 1..l_buf.count loop
             g_style_map(l_buf(i).style_name) := l_buf(i);
@@ -609,25 +631,21 @@ create or replace package body odt_parser as
       if p_content_xml is not null then
          for r in (
             select x.sname
-              from xmltable (
-                      xmlnamespaces (
-                         'urn:oasis:names:tc:opendocument:xmlns:text:1.0' as "text"
-                      ),
-                      '//*[@text:style-name]'
-                      passing xmltype(p_content_xml)
-                      columns sname varchar2(200) path '@text:style-name'
-                   ) x
+              from xmltable ( xmlnamespaces ( 'urn:oasis:names:tc:opendocument:xmlns:text:1.0' as "text" ),
+            '//*[@text:style-name]'
+                  passing xmltype(p_content_xml)
+               columns
+                  sname varchar2(200) path '@text:style-name'
+            ) x
              where x.sname is not null
             union
             select x.sname
-              from xmltable (
-                      xmlnamespaces (
-                         'urn:oasis:names:tc:opendocument:xmlns:table:1.0' as "table"
-                      ),
-                      '//*[@table:style-name]'
-                      passing xmltype(p_content_xml)
-                      columns sname varchar2(200) path '@table:style-name'
-                   ) x
+              from xmltable ( xmlnamespaces ( 'urn:oasis:names:tc:opendocument:xmlns:table:1.0' as "table" ),
+            '//*[@table:style-name]'
+                  passing xmltype(p_content_xml)
+               columns
+                  sname varchar2(200) path '@table:style-name'
+            ) x
              where x.sname is not null
          ) loop
             l_used(r.sname) := '1';
@@ -640,8 +658,7 @@ create or replace package body odt_parser as
       while l_nm is not null loop
          l_s := g_style_map(l_nm);
          if p_content_xml is null
-         or l_used.exists(l_nm)
-         then
+         or l_used.exists(l_nm) then
             apex_json.open_object(l_nm);
             write_style_props(
                p_font_name       => l_s.font_name,
@@ -673,28 +690,25 @@ create or replace package body odt_parser as
                    x.fi,
                    x.co,
                    x.ta
-              into l_def_fn,
-                   l_def_fs,
-                   l_def_fw,
-                   l_def_fi,
-                   l_def_co,
-                   l_def_ta
-              from xmltable (
-                      xmlnamespaces (
-                         'urn:oasis:names:tc:opendocument:xmlns:office:1.0' as "office",
-                         'urn:oasis:names:tc:opendocument:xmlns:style:1.0'  as "style",
-                         'urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0' as "fo"
-                      ),
-                      '//office:styles/style:default-style[@style:family="paragraph"]'
-                      passing xmltype(p_styles_xml)
-                      columns
-                         fn varchar2(100) path 'style:text-properties/@style:font-name',
-                         fs varchar2(20)  path 'style:text-properties/@fo:font-size',
-                         fw varchar2(20)  path 'style:text-properties/@fo:font-weight',
-                         fi varchar2(20)  path 'style:text-properties/@fo:font-style',
-                         co varchar2(20)  path 'style:text-properties/@fo:color',
-                         ta varchar2(30)  path 'style:paragraph-properties/@fo:text-align'
-                   ) x
+              into
+               l_def_fn,
+               l_def_fs,
+               l_def_fw,
+               l_def_fi,
+               l_def_co,
+               l_def_ta
+              from xmltable ( xmlnamespaces ( 'urn:oasis:names:tc:opendocument:xmlns:office:1.0' as "office",'urn:oasis:names:tc:opendocument:xmlns:style:1.0'
+              as "style",'urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0' as "fo" ),
+            '//office:styles/style:default-style[@style:family="paragraph"]'
+                  passing xmltype(p_styles_xml)
+               columns
+                  fn varchar2(100) path 'style:text-properties/@style:font-name',
+                  fs varchar2(20) path 'style:text-properties/@fo:font-size',
+                  fw varchar2(20) path 'style:text-properties/@fo:font-weight',
+                  fi varchar2(20) path 'style:text-properties/@fo:font-style',
+                  co varchar2(20) path 'style:text-properties/@fo:color',
+                  ta varchar2(30) path 'style:paragraph-properties/@fo:text-align'
+            ) x
              where rownum = 1;
 
             write_style_props(
@@ -727,7 +741,7 @@ create or replace package body odt_parser as
    * Heading           →  {"text":"Title","style":"Heading1","headlineLevel":1}
    */
    procedure write_paragraph (
-      p_para_node   in dbms_xmldom.DOMNode,
+      p_para_node   in dbms_xmldom.domnode,
       p_para_style  in varchar2,
       p_heading_lvl in pls_integer default null
    ) is
@@ -742,132 +756,24 @@ create or replace package body odt_parser as
       l_run_count pls_integer := 0;
       l_has_spans boolean := false;
       l_full_txt  varchar2(32767) := '';
-
-      l_children  dbms_xmldom.DOMNodeList;
-      l_child     dbms_xmldom.DOMNode;
+      l_children  dbms_xmldom.domnodelist;
+      l_child     dbms_xmldom.domnode;
       l_ntype     pls_integer;
       l_lname     varchar2(200);
-      l_celem     dbms_xmldom.DOMElement;
+      l_celem     dbms_xmldom.domelement;
       l_run       t_run;
-   begin
-      l_children := dbms_xmldom.getChildNodes(p_para_node);
 
-      for i in 0..dbms_xmldom.getLength(l_children) - 1 loop
-         l_child := dbms_xmldom.item(
-            l_children,
-            i
-         );
-         l_ntype := dbms_xmldom.getNodeType(l_child);
-
-         if l_ntype = dbms_xmldom.TEXT_NODE then
-            l_celem := dbms_xmldom.makeElement(l_child);
-            l_run.rtype     := 'text';
-            l_run.txt       := dbms_xmldom.getNodeValue(l_child);
-            l_run.sty       := null;
-            l_run_count     := l_run_count + 1;
-            l_runs(l_run_count) := l_run;
-         elsif l_ntype = dbms_xmldom.ELEMENT_NODE then
-            l_celem := dbms_xmldom.makeElement(l_child);
-            l_lname := dbms_xmldom.getLocalName(l_celem);
-            case l_lname
-               when 's' then
-                  l_run.rtype     := 'text';
-                  l_run.txt       := ' ';
-                  l_run.sty       := null;
-                  l_run_count     := l_run_count + 1;
-                  l_runs(l_run_count) := l_run;
-               when 'tab' then
-                  l_run.rtype     := 'text';
-                  l_run.txt       := chr(9);
-                  l_run.sty       := null;
-                  l_run_count     := l_run_count + 1;
-                  l_runs(l_run_count) := l_run;
-               when 'line-break' then
-                  l_run.rtype     := 'text';
-                  l_run.txt       := chr(10);
-                  l_run.sty       := null;
-                  l_run_count     := l_run_count + 1;
-                  l_runs(l_run_count) := l_run;
-               when 'span' then
-                  l_run.rtype     := 'span';
-                  l_run.txt       := dom_get_text(l_child);
-                  l_run.sty       := dom_get_attr(
-                     l_celem,
-                     c_ns_text,
-                     'style-name'
-                  );
-                  l_run_count     := l_run_count + 1;
-                  l_runs(l_run_count) := l_run;
-                  l_has_spans     := true;
-               else
-                  null;
-            end case;
-         end if;
-      end loop;
-
-      apex_json.open_object;
-      if l_run_count = 0 then
-      -- Empty paragraph
-         apex_json.write(
-            'text',
-            ''
-         );
-      elsif not l_has_spans then
-      -- Plain text: concatenate all fragments
-         for i in 1..l_run_count loop
-            l_full_txt := l_full_txt || l_runs(i).txt;
-         end loop;
-         apex_json.write(
-            'text',
-            l_full_txt
-         );
-      else
-      -- Mixed inline runs: emit as an array of run objects
-         apex_json.open_array('text');
-         for i in 1..l_run_count loop
-            apex_json.open_object;
-            apex_json.write(
-               'text',
-               l_runs(i).txt
-            );
-            if
-               l_runs(i).rtype = 'span'
-               and l_runs(i).sty is not null
-            then
-               apex_json.write(
-                  'style',
-                  l_runs(i).sty
-               );
-            end if;
-            apex_json.close_object;
-         end loop;
-         apex_json.close_array;
-      end if;
-
-    -- Paragraph / heading style metadata
-      if p_heading_lvl is not null then
-         apex_json.write(
-            'style',
-            'Heading' || to_char(p_heading_lvl)
-         );
-         apex_json.write(
-            'headlineLevel',
-            p_heading_lvl
-         );
-      elsif p_para_style is not null then
-         apex_json.write(
-            'style',
-            p_para_style
-         );
-      end if;
-
-    -- Write resolved style properties inline so each content node is self-contained
-      if p_para_style is not null
-      and g_style_map.exists(p_para_style)
-      then
-         declare
-            l_s t_sty := g_style_map(p_para_style);
-         begin
+      -- Write inline style properties for a given style name from the map
+      procedure write_inline_props (
+         p_sty_name in varchar2
+      ) is
+         l_s t_sty;
+      begin
+         if
+            p_sty_name is not null
+            and g_style_map.exists(p_sty_name)
+         then
+            l_s := g_style_map(p_sty_name);
             write_style_props(
                p_font_name       => l_s.font_name,
                p_font_size       => l_s.font_size,
@@ -882,7 +788,139 @@ create or replace package body odt_parser as
                p_margin_left     => l_s.margin_lft,
                p_line_height     => l_s.line_height
             );
-         end;
+         end if;
+      end write_inline_props;
+
+   begin
+      -- -----------------------------------------------------------------------
+      -- Step 1 – collect child runs
+      -- -----------------------------------------------------------------------
+      l_children := dbms_xmldom.getchildnodes(p_para_node);
+      for i in 0..dbms_xmldom.getlength(l_children) - 1 loop
+         l_child := dbms_xmldom.item(
+            l_children,
+            i
+         );
+         l_ntype := dbms_xmldom.getnodetype(l_child);
+         if l_ntype = dbms_xmldom.text_node then
+            l_run.rtype := 'text';
+            l_run.txt := dbms_xmldom.getnodevalue(l_child);
+            l_run.sty := null;
+            l_run_count := l_run_count + 1;
+            l_runs(l_run_count) := l_run;
+         elsif l_ntype = dbms_xmldom.element_node then
+            l_celem := dbms_xmldom.makeelement(l_child);
+            l_lname := dbms_xmldom.getlocalname(l_celem);
+            case l_lname
+               when 's' then
+                  l_run.rtype := 'text';
+                  l_run.txt := ' ';
+                  l_run.sty := null;
+                  l_run_count := l_run_count + 1;
+                  l_runs(l_run_count) := l_run;
+               when 'tab' then
+                  l_run.rtype := 'text';
+                  l_run.txt := chr(9);
+                  l_run.sty := null;
+                  l_run_count := l_run_count + 1;
+                  l_runs(l_run_count) := l_run;
+               when 'line-break' then
+                  l_run.rtype := 'text';
+                  l_run.txt := chr(10);
+                  l_run.sty := null;
+                  l_run_count := l_run_count + 1;
+                  l_runs(l_run_count) := l_run;
+               when 'span' then
+                  l_run.rtype := 'span';
+                  l_run.txt := dom_get_text(l_child);
+                  l_run.sty := dom_get_attr(
+                     l_celem,
+                     c_ns_text,
+                     'style-name'
+                  );
+                  l_run_count := l_run_count + 1;
+                  l_runs(l_run_count) := l_run;
+                  l_has_spans := true;
+               when 'p' then
+                  l_run.rtype := 'text';
+                  l_run.txt := dom_get_text(l_child);
+                  l_run.sty := dom_get_attr(
+                     l_celem,
+                     c_ns_text,
+                     'style-name'
+                  );
+                  l_run_count := l_run_count + 1;
+                  l_runs(l_run_count) := l_run;
+               else
+                  null;
+            end case;
+         end if;
+      end loop;
+
+      -- -----------------------------------------------------------------------
+      -- Step 2 – open object, write XML attributes first
+      --   style name + headlineLevel (from p_heading_lvl / p_para_style)
+      --   then resolved style properties from g_style_map (inline, flat)
+      -- -----------------------------------------------------------------------
+      apex_json.open_object;
+      if p_heading_lvl is not null then
+         apex_json.write(
+            'style',
+            'Heading' || to_char(p_heading_lvl)
+         );
+         apex_json.write(
+            'headlineLevel',
+            p_heading_lvl
+         );
+         write_inline_props('Heading' || to_char(p_heading_lvl));
+      elsif p_para_style is not null then
+         apex_json.write(
+            'style',
+            p_para_style
+         );
+         write_inline_props(p_para_style);
+      end if;
+
+      -- -----------------------------------------------------------------------
+      -- Step 3 – write text content (children)
+      -- -----------------------------------------------------------------------
+      if l_run_count = 0 then
+         apex_json.write(
+            'text',
+            ''
+         );
+      elsif not l_has_spans then
+         -- Plain text: concatenate all fragments
+         for i in 1..l_run_count loop
+            l_full_txt := l_full_txt || l_runs(i).txt;
+         end loop;
+         apex_json.write(
+            'text',
+            l_full_txt
+         );
+      else
+         -- Mixed inline runs: array of run objects
+         -- Each span also carries its own resolved style properties
+         apex_json.open_array('text');
+         for i in 1..l_run_count loop
+            apex_json.open_object;
+            if
+               l_runs(i).rtype = 'span'
+               and l_runs(i).sty is not null
+            then
+               apex_json.write(
+                  'style',
+                  l_runs(i).sty
+               );
+               write_inline_props(l_runs(i).sty);
+            end if;
+            apex_json.write(
+               'text',
+               l_runs(i).txt
+            );
+            apex_json.close_object;
+         end loop;
+         apex_json.close_array;
       end if;
 
       apex_json.close_object;
@@ -902,43 +940,43 @@ create or replace package body odt_parser as
    * Supports: column count, cell text, style-name, col/row span.
    */
    procedure write_table (
-      p_table_node in dbms_xmldom.DOMNode
+      p_table_node in dbms_xmldom.domnode
    ) is
-      l_col_count  number := 0;
-      l_children   dbms_xmldom.DOMNodeList;
-      l_child      dbms_xmldom.DOMNode;
-      l_ntype      pls_integer;
-      l_lname      varchar2(200);
-      l_elem       dbms_xmldom.DOMElement;
-      l_rpt        number;
-      l_row_children dbms_xmldom.DOMNodeList;
-      l_row_child    dbms_xmldom.DOMNode;
-      l_row_elem     dbms_xmldom.DOMElement;
+      l_col_count    number := 0;
+      l_children     dbms_xmldom.domnodelist;
+      l_child        dbms_xmldom.domnode;
+      l_ntype        pls_integer;
+      l_lname        varchar2(200);
+      l_elem         dbms_xmldom.domelement;
+      l_rpt          number;
+      l_row_children dbms_xmldom.domnodelist;
+      l_row_child    dbms_xmldom.domnode;
+      l_row_elem     dbms_xmldom.domelement;
       l_row_lname    varchar2(200);
-      l_cspan      number;
-      l_rspan      number;
-      l_sty        varchar2(200);
-      l_txt        varchar2(32767);
+      l_cspan        number;
+      l_rspan        number;
+      l_sty          varchar2(200);
+      l_txt          varchar2(32767);
    begin
     -- Pass 1: count columns from table:table-column elements
-      l_children := dbms_xmldom.getChildNodes(p_table_node);
-      for i in 0..dbms_xmldom.getLength(l_children) - 1 loop
+      l_children := dbms_xmldom.getchildnodes(p_table_node);
+      for i in 0..dbms_xmldom.getlength(l_children) - 1 loop
          l_child := dbms_xmldom.item(
             l_children,
             i
          );
-         if dbms_xmldom.getNodeType(l_child) = dbms_xmldom.ELEMENT_NODE then
-            l_elem  := dbms_xmldom.makeElement(l_child);
-            l_lname := dbms_xmldom.getLocalName(l_elem);
+         if dbms_xmldom.getnodetype(l_child) = dbms_xmldom.element_node then
+            l_elem := dbms_xmldom.makeelement(l_child);
+            l_lname := dbms_xmldom.getlocalname(l_elem);
             if l_lname = 'table-column' then
-               l_rpt       := to_number(nvl(
+               l_rpt := to_number ( nvl(
                   dom_get_attr(
                      l_elem,
                      c_ns_table,
                      'number-columns-repeated'
                   ),
                   '1'
-               ));
+               ) );
                l_col_count := l_col_count + l_rpt;
             end if;
          end if;
@@ -946,7 +984,6 @@ create or replace package body odt_parser as
       if l_col_count = 0 then
          l_col_count := 1;
       end if;
-
       apex_json.open_object;
       apex_json.open_object('table');
 
@@ -961,51 +998,50 @@ create or replace package body odt_parser as
       apex_json.open_array('body');
 
     -- Pass 2: rows and cells
-      for i in 0..dbms_xmldom.getLength(l_children) - 1 loop
+      for i in 0..dbms_xmldom.getlength(l_children) - 1 loop
          l_child := dbms_xmldom.item(
             l_children,
             i
          );
-         if dbms_xmldom.getNodeType(l_child) = dbms_xmldom.ELEMENT_NODE then
-            l_elem  := dbms_xmldom.makeElement(l_child);
-            l_lname := dbms_xmldom.getLocalName(l_elem);
+         if dbms_xmldom.getnodetype(l_child) = dbms_xmldom.element_node then
+            l_elem := dbms_xmldom.makeelement(l_child);
+            l_lname := dbms_xmldom.getlocalname(l_elem);
             if l_lname = 'table-row' then
                apex_json.open_array;  -- row
 
-               l_row_children := dbms_xmldom.getChildNodes(l_child);
-               for j in 0..dbms_xmldom.getLength(l_row_children) - 1 loop
+               l_row_children := dbms_xmldom.getchildnodes(l_child);
+               for j in 0..dbms_xmldom.getlength(l_row_children) - 1 loop
                   l_row_child := dbms_xmldom.item(
                      l_row_children,
                      j
                   );
-                  if dbms_xmldom.getNodeType(l_row_child) = dbms_xmldom.ELEMENT_NODE then
-                     l_row_elem  := dbms_xmldom.makeElement(l_row_child);
-                     l_row_lname := dbms_xmldom.getLocalName(l_row_elem);
+                  if dbms_xmldom.getnodetype(l_row_child) = dbms_xmldom.element_node then
+                     l_row_elem := dbms_xmldom.makeelement(l_row_child);
+                     l_row_lname := dbms_xmldom.getlocalname(l_row_elem);
                      if l_row_lname in ( 'table-cell',
                                          'covered-table-cell' ) then
-                        l_sty   := dom_get_attr(
+                        l_sty := dom_get_attr(
                            l_row_elem,
                            c_ns_table,
                            'style-name'
                         );
-                        l_cspan := to_number(nvl(
+                        l_cspan := to_number ( nvl(
                            dom_get_attr(
                               l_row_elem,
                               c_ns_table,
                               'number-columns-spanned'
                            ),
                            '1'
-                        ));
-                        l_rspan := to_number(nvl(
+                        ) );
+                        l_rspan := to_number ( nvl(
                            dom_get_attr(
                               l_row_elem,
                               c_ns_table,
                               'number-rows-spanned'
                            ),
                            '1'
-                        ));
-                        l_txt   := dom_get_text(l_row_child);
-
+                        ) );
+                        l_txt := dom_get_text(l_row_child);
                         apex_json.open_object;
                         apex_json.write(
                            'text',
@@ -1059,56 +1095,55 @@ create or replace package body odt_parser as
    *   {"ol":["item 1","item 2"]}        (ordered)
    */
    procedure write_list (
-      p_list_node  in dbms_xmldom.DOMNode,
+      p_list_node  in dbms_xmldom.domnode,
       p_style_name in varchar2 default null,
       p_is_ordered in boolean default false
    ) is
-      l_tag   varchar2(4) :=
+      l_tag          varchar2(4) :=
          case
             when p_is_ordered then
                'ol'
             else
                'ul'
          end;
-      l_children     dbms_xmldom.DOMNodeList;
-      l_child        dbms_xmldom.DOMNode;
-      l_elem         dbms_xmldom.DOMElement;
+      l_children     dbms_xmldom.domnodelist;
+      l_child        dbms_xmldom.domnode;
+      l_elem         dbms_xmldom.domelement;
       l_lname        varchar2(200);
-      l_item_ch      dbms_xmldom.DOMNodeList;
-      l_item_child   dbms_xmldom.DOMNode;
-      l_item_elem    dbms_xmldom.DOMElement;
+      l_item_ch      dbms_xmldom.domnodelist;
+      l_item_child   dbms_xmldom.domnode;
+      l_item_elem    dbms_xmldom.domelement;
       l_item_lname   varchar2(200);
       l_item_txt     varchar2(32767);
       l_first_p_done boolean;
    begin
       apex_json.open_object;
       apex_json.open_array(l_tag);
-
-      l_children := dbms_xmldom.getChildNodes(p_list_node);
-      for i in 0..dbms_xmldom.getLength(l_children) - 1 loop
+      l_children := dbms_xmldom.getchildnodes(p_list_node);
+      for i in 0..dbms_xmldom.getlength(l_children) - 1 loop
          l_child := dbms_xmldom.item(
             l_children,
             i
          );
-         if dbms_xmldom.getNodeType(l_child) = dbms_xmldom.ELEMENT_NODE then
-            l_elem  := dbms_xmldom.makeElement(l_child);
-            l_lname := dbms_xmldom.getLocalName(l_elem);
+         if dbms_xmldom.getnodetype(l_child) = dbms_xmldom.element_node then
+            l_elem := dbms_xmldom.makeelement(l_child);
+            l_lname := dbms_xmldom.getlocalname(l_elem);
             if l_lname = 'list-item' then
             -- Get text of first text:p child
-               l_item_txt     := null;
+               l_item_txt := null;
                l_first_p_done := false;
-               l_item_ch      := dbms_xmldom.getChildNodes(l_child);
-               for j in 0..dbms_xmldom.getLength(l_item_ch) - 1 loop
+               l_item_ch := dbms_xmldom.getchildnodes(l_child);
+               for j in 0..dbms_xmldom.getlength(l_item_ch) - 1 loop
                   if not l_first_p_done then
                      l_item_child := dbms_xmldom.item(
                         l_item_ch,
                         j
                      );
-                     if dbms_xmldom.getNodeType(l_item_child) = dbms_xmldom.ELEMENT_NODE then
-                        l_item_elem  := dbms_xmldom.makeElement(l_item_child);
-                        l_item_lname := dbms_xmldom.getLocalName(l_item_elem);
+                     if dbms_xmldom.getnodetype(l_item_child) = dbms_xmldom.element_node then
+                        l_item_elem := dbms_xmldom.makeelement(l_item_child);
+                        l_item_lname := dbms_xmldom.getlocalname(l_item_elem);
                         if l_item_lname = 'p' then
-                           l_item_txt     := dom_get_text(l_item_child);
+                           l_item_txt := dom_get_text(l_item_child);
                            l_first_p_done := true;
                         end if;
                      end if;
@@ -1145,13 +1180,13 @@ create or replace package body odt_parser as
    ) is
 
       l_xml       xmltype;
-      l_doc       dbms_xmldom.DOMDocument;
-      l_root      dbms_xmldom.DOMElement;
-      l_text_list dbms_xmldom.DOMNodeList;
-      l_text_node dbms_xmldom.DOMNode;
-      l_children  dbms_xmldom.DOMNodeList;
-      l_child     dbms_xmldom.DOMNode;
-      l_elem      dbms_xmldom.DOMElement;
+      l_doc       dbms_xmldom.domdocument;
+      l_root      dbms_xmldom.domelement;
+      l_text_list dbms_xmldom.domnodelist;
+      l_text_node dbms_xmldom.domnode;
+      l_children  dbms_xmldom.domnodelist;
+      l_child     dbms_xmldom.domnode;
+      l_elem      dbms_xmldom.domelement;
       l_lname     varchar2(200);
       l_sty       varchar2(200);
       l_olvl      pls_integer;
@@ -1196,19 +1231,18 @@ create or replace package body odt_parser as
          apex_json.close_array;
          return;
       end if;
-
-      l_xml  := xmltype(p_content_xml);
-      l_doc  := dbms_xmldom.newDOMDocument(l_xml);
-      l_root := dbms_xmldom.getDocumentElement(l_doc);
+      l_xml := xmltype(p_content_xml);
+      l_doc := dbms_xmldom.newdomdocument(l_xml);
+      l_root := dbms_xmldom.getdocumentelement(l_doc);
 
     -- Find the single office:text element
-      l_text_list := dbms_xmldom.getElementsByTagName(
+      l_text_list := dbms_xmldom.getelementsbytagname(
          l_root,
          'text',
          c_ns_office
       );
-      if dbms_xmldom.getLength(l_text_list) = 0 then
-         dbms_xmldom.freeDocument(l_doc);
+      if dbms_xmldom.getlength(l_text_list) = 0 then
+         dbms_xmldom.freedocument(l_doc);
          apex_json.close_array;
          return;
       end if;
@@ -1218,40 +1252,35 @@ create or replace package body odt_parser as
       );
 
     -- Iterate direct children of office:text
-      l_children := dbms_xmldom.getChildNodes(l_text_node);
-      for i in 0..dbms_xmldom.getLength(l_children) - 1 loop
+      l_children := dbms_xmldom.getchildnodes(l_text_node);
+      for i in 0..dbms_xmldom.getlength(l_children) - 1 loop
          l_child := dbms_xmldom.item(
             l_children,
             i
          );
-         if dbms_xmldom.getNodeType(l_child) = dbms_xmldom.ELEMENT_NODE then
-            l_elem  := dbms_xmldom.makeElement(l_child);
-            l_lname := dbms_xmldom.getLocalName(l_elem);
+         if dbms_xmldom.getnodetype(l_child) = dbms_xmldom.element_node then
+            l_elem := dbms_xmldom.makeelement(l_child);
+            l_lname := dbms_xmldom.getlocalname(l_elem);
+            l_sty := dom_get_attr(
+               l_elem,
+               c_ns_text,
+               'style-name'
+            );
             case l_lname
                when 'p' then
-                  l_sty := dom_get_attr(
-                     l_elem,
-                     c_ns_text,
-                     'style-name'
-                  );
                   write_paragraph(
                      l_child,
                      l_sty
                   );
                when 'h' then
-                  l_sty  := dom_get_attr(
-                     l_elem,
-                     c_ns_text,
-                     'style-name'
-                  );
-                  l_olvl := to_number(nvl(
+                  l_olvl := to_number ( nvl(
                      dom_get_attr(
                         l_elem,
                         c_ns_text,
                         'outline-level'
                      ),
                      '1'
-                  ));
+                  ) );
                   write_paragraph(
                      l_child,
                      l_sty,
@@ -1276,12 +1305,12 @@ create or replace package body odt_parser as
          end if;
       end loop;
 
-      dbms_xmldom.freeDocument(l_doc);
+      dbms_xmldom.freedocument(l_doc);
       apex_json.close_array;  -- content
    exception
       when others then
-         if not dbms_xmldom.isNull(l_doc) then
-            dbms_xmldom.freeDocument(l_doc);
+         if not dbms_xmldom.isnull(l_doc) then
+            dbms_xmldom.freedocument(l_doc);
          end if;
          raise;
    end write_content;
@@ -1297,10 +1326,16 @@ create or replace package body odt_parser as
       l_result clob;
    begin
       apex_json.initialize_clob_output;
-      load_styles(p_styles_xml, p_content_xml);      -- populate g_style_map first
+      load_styles(
+         p_styles_xml,
+         p_content_xml
+      );      -- populate g_style_map first
       apex_json.open_object;            -- {
       write_content(p_content_xml);                  --   "content": [...] (inline props via g_style_map)
-      write_styles(p_styles_xml, p_content_xml);     --   "styles": {...}, "defaultStyle": {...}
+      write_styles(
+         p_styles_xml,
+         p_content_xml
+      );     --   "styles": {...}, "defaultStyle": {...}
       apex_json.close_object;           -- }
       l_result := apex_json.get_clob_output;
       apex_json.free_output;
