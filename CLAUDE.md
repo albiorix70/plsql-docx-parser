@@ -27,6 +27,7 @@ Compile order:
 - Do not use `dbms_output` calls in production code
 - Do not use deprecated DOM APIs — `getElementsByTagNameNS` is gone since 19c; use `getElementsByTagName(element, name, ns)` with a root element, not a document
 - `dbms_xmldom.getElementsByTagName` signature: `(DOMElement, name, ns)` — element first, then name, then namespace URI
+- `getNamespaceURI` is deprecated since Oracle 19c — use `getNamespace(DOMElement)` for elements and `getNamespace(DOMAttr)` for attributes; cast with `makeElement` / `makeAttr` first since `item(domnamednodemap, i)` returns `DOMNode`
 
 ## Code Standards
 
